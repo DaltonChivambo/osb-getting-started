@@ -33,14 +33,41 @@ Baseado em: https://github.com/oracle/docker-images/tree/main/OracleSOASuite
 
 ### 1. Download dos binários (manual, na Oracle)
 
+#### 1.1. Instaladores do SOA Suite / OSB
+
 Em https://edelivery.oracle.com, procura "Oracle SOA Suite" e baixa para a versão **12.2.1.4.0**:
 
 - `fmw_12.2.1.4.0_soa.jar`
 - `fmw_12.2.1.4.0_osb.jar`
 - `fmw_12.2.1.4.0_b2bhealthcare.jar`
 
-Também precisas da imagem base **Oracle Fusion Middleware Infrastructure**, disponível em
-https://container-registry.oracle.com (aceita a licença lá primeiro, depois `docker login container-registry.oracle.com`).
+#### 1.2. Imagem base (Oracle Fusion Middleware Infrastructure)
+
+1. Vai a https://container-registry.oracle.com e faz login com a tua conta Oracle.
+2. Navega até **Middleware → fmw-infrastructure** e seleciona a tag **`12.2.1.4`** (JDK 8 +
+   Oracle Linux 7 — compatível com os `.jar` acima).
+3. Aceita a **License Agreement** dessa imagem (obrigatório antes do pull funcionar).
+4. Gera um **Auth Token** — desde 30/06/2025 a Oracle já não aceita a password normal da conta
+   no `docker login`:
+   - Clica no ícone da conta (canto superior direito) → **Auth Token**.
+   - Gera um novo token e copia o valor (só é mostrado uma vez).
+5. Faz login do Docker usando o Auth Token como password:
+
+   ```bash
+   docker login container-registry.oracle.com
+   # Username: <o teu email da conta Oracle>
+   # Password: <cola aqui o Auth Token, não a password da conta>
+   ```
+
+6. Faz o pull da imagem base:
+
+   ```bash
+   docker pull container-registry.oracle.com/middleware/fmw-infrastructure:12.2.1.4
+   ```
+
+   ```bash
+   docker images | grep fmw-infrastructure   # confirma que ficou local
+   ```
 
 ### 2. Clonar o repositório oficial e construir a imagem
 
