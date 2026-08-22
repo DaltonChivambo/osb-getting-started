@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "OSB - Teste Local",
+    "description": "Coleção mínima para testar um domínio OSB local via Docker: consola de administração e uma Proxy Service de exemplo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Admin Console - status",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:7001/console/login/LoginForm.jsp",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "7001",
+          "path": ["console", "login", "LoginForm.jsp"]
+        }
+      }
+    },
+    {
+      "name": "Service Bus Console - status",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:7001/servicebus",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "7001",
+          "path": ["servicebus"]
+        }
+      }
+    },
+    {
+      "name": "Proxy Service - teste (ajustar path)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:9001/echo/test",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "9001",
+          "path": ["echo", "test"]
+        }
+      }
+    }
+  ]
+}
