@@ -10,8 +10,8 @@ de uma instalação on-prem completa.
 
 ```
 .
-├── README.md                              — este guia (setup inicial, do zero)
-├── RUNNING.md                             — arrancar/parar o ambiente numa sessão normal
+├── README.md                              — este guia (setup do zero + primeira vez vs. vezes seguintes)
+├── RUNNING.md                             — chuleta rápida do dia-a-dia + troubleshooting detalhado
 ├── docker/
 │   ├── setenv.sh                          — variáveis de ambiente do domínio OSB
 │   └── docker-compose.yml                 — domínio OSB-only (base de dados + Admin + Managed Server)
@@ -97,7 +97,7 @@ Edita `setenv.sh`:
 - **Muda as passwords** (`DC_ORCL_SYSPWD`, `DC_ADMIN_PWD`, `DC_RCU_SCHPWD`) — regra Oracle:
   mín. 8 caracteres, pelo menos 1 maiúscula e 1 número.
 
-### 4. Subir o ambiente
+### 4. Subir o ambiente — primeira vez
 
 ```bash
 cd docker-images/OracleSOASuite/osb-domain
@@ -128,6 +128,10 @@ docker logs -f osbms
   docker exec osbms tail -f /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
   ```
 
+  (Em Git Bash, se `docker exec` disser `cannot open '.../logs/as.log'` com um caminho que
+  começou por `C:/Program Files/Git/...`, o MSYS está a "traduzir" o caminho Linux para Windows.
+  Prefixa o comando com `MSYS_NO_PATHCONV=1`.)
+
 - `docker ps` pode mostrar os containers como `(unhealthy)` ou `(health: starting)` durante
   vários minutos depois de o log já dizer `The server started in RUNNING mode.` — o healthcheck
   demora um pouco a apanhar o estado novo. Não é sinal de erro por si só; confia na mensagem
@@ -142,8 +146,8 @@ docker logs -f osbms
 
 ### 4.1 Fix obrigatório, uma vez só: identity store embutido
 
-Na primeira vez que o domínio é criado, o login na Service Bus Console (e em qualquer página
-ADF autenticada) falha com um redirect para `errorPage.jspx`. A causa é um bug de
+Depois do domínio criado pela primeira vez, o login na Service Bus Console (e em qualquer
+página ADF autenticada) falha com um redirect para `errorPage.jspx`. A causa é um bug de
 incompatibilidade entre o JDK 8 incluído na imagem e código antigo do FMW: o identity store
 embutido (`libOVD`) tenta ligar-se via `ldap://[<ip-do-container>]:7001` — colocar um endereço
 IPv4 entre `[]`, como se fosse IPv6, faz o parser de URI mais recente rejeitar com
@@ -158,7 +162,47 @@ docker restart osbas
 ```
 
 Isto vive na configuração do domínio (bind mount), por isso só precisas de fazer isto **uma
-vez** — sobrevive a `docker-compose down`/`up` normais. Ver `RUNNING.md` para mais detalhe.
+vez por domínio criado** — sobrevive a paragens/arranques normais (secção 4.2). Só precisas de
+repetir se apagares o domínio todo (`rm -rf $DC_USERHOME/osbdomain` ou equivalente) e deixares
+o `createDomainAndStart.sh` recriá-lo do zero.
+
+### 4.2 Subir o ambiente — vezes seguintes (domínio e BD já existem)
+
+Depois da primeira vez, o domínio e as schemas RCU já existem, guardados em:
+
+- **BD (schemas RCU, dados Oracle)**: volume Docker nomeado `osb_soadb_orcl`, pinado no
+  `docker-compose.yml` — sobrevive a `docker-compose down` (sem `-v`) e a reinícios da máquina.
+- **Domínio WebLogic/OSB (config, o fix da secção 4.1, etc.)**: bind mount em
+  `$DC_USERHOME/osbdomain` (pasta normal no teu disco) — sobrevive sempre, mesmo a `down -v`.
+
+Ou seja, arrancar de novo é só isto — os mesmos três comandos da secção 4, mas desta vez
+`osbas` deteta que o domínio já existe e salta o RCU/criação, arrancando em minutos em vez de
+20-40:
+
+```bash
+cd docker-images/OracleSOASuite/osb-domain
+source setenv.sh
+
+docker-compose up -d soadb
+docker logs -f soadb          # espera por "DATABASE IS READY TO USE!"
+
+docker-compose up -d osbas
+docker exec osbas tail -f /u01/oracle/user_projects/domains/infra_domain/logs/as.log
+# procura "SOA RCU has already been loaded. Skipping..." e depois "RUNNING mode"
+
+docker-compose up -d osbms
+docker exec osbms tail -f /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
+```
+
+Não precisas de repetir o fix da secção 4.1 — já está guardado na configuração do domínio.
+
+**Importante sobre a BD**: isto só é seguro (sem perder as schemas RCU) se o teu
+`docker-compose.yml` tiver a entrada `soadb_orcl:/ORCL` no serviço `soadb` e a secção
+`volumes: soadb_orcl:` no fim do ficheiro — confirma com `git pull` se não tiveres a certeza.
+Sem isso, um `docker-compose down` + `up` cria um volume novo (vazio) para os dados reais da
+Oracle a cada vez, e o `osbas` falha com `ORA-01017: invalid username/password` (mesmo com a
+password certa — a schema é que deixou de existir). Ver `RUNNING.md` para o detalhe completo
+deste e de outros problemas comuns.
 
 ### 5. Aceder às consolas
 
@@ -189,7 +233,23 @@ Uma resposta HTTP 200 vinda do `httpbin.org` através do OSB confirma o ciclo co
 ### Parar / limpar
 
 ```bash
-docker-compose down          # para os containers, mantém os dados (volumes em $DC_USERHOME)
-docker-compose down -v       # para e apaga volumes nomeados (dados ficam em bind mounts, não são apagados)
-rm -rf $DC_USERHOME          # apaga mesmo tudo (domínio + dados da BD)
+docker-compose down          # para os containers; mantém tudo (domínio em $DC_USERHOME + BD no volume nomeado)
 ```
+
+Isto é seguro para usar sempre — ver secção 4.2 para retomar depois.
+
+```bash
+docker-compose down -v       # como acima, mas TAMBÉM apaga o volume osb_soadb_orcl (schemas RCU, dados da BD)
+```
+
+Depois disto, o `osbas` vai falhar com `ORA-01017` até correres o RCU outra vez (ou seja, até
+recriares o domínio do zero). Só usa `down -v` se for mesmo essa a intenção.
+
+```bash
+docker volume rm osb_soadb_orcl   # apaga só os dados da BD (equivalente ao efeito do -v acima)
+rm -rf $DC_USERHOME               # apaga o domínio WebLogic/OSB + a pasta bind-mount da BD (esta última já vem vazia)
+```
+
+Para recomeçar mesmo do zero (domínio + BD), precisas das duas: `docker volume rm
+osb_soadb_orcl` **e** `rm -rf $DC_USERHOME`. Só apagar `$DC_USERHOME` não chega — os dados
+reais da Oracle não vivem lá dentro, vivem no volume nomeado (ver secção 4.2).
