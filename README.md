@@ -8,22 +8,23 @@ de uma instalação on-prem completa.
 
 Se quiseres perceber a arquitetura antes de meteres as mãos na massa — o que é o WebLogic vs o
 OSB, o papel de cada um dos três containers, de onde vem a interface web, e o que o padrão
-Proxy → Pipeline → Business Service realmente resolve — ver **`CONCEITOS.md`**.
+Proxy → Pipeline → Business Service realmente resolve — ver **`docs/CONCEITOS.md`**.
 
 ## Estrutura do repositório
 
 ```
 .
 ├── README.md                              — este guia (setup do zero + primeira vez vs. vezes seguintes)
-├── RUNNING.md                             — chuleta rápida do dia-a-dia + troubleshooting detalhado
-├── TUTORIAL.md                            — passo a passo detalhado: criar a primeira Proxy Service na consola
-├── CONCEITOS.md                           — arquitetura: WebLogic vs OSB, os 3 containers, o padrão Proxy→Pipeline→Business Service
-├── CONCEITOS-AVANCADOS.md                 — sessões, tipagem REST, anatomia do Message Flow, clustering, segurança OPSS
+├── docs/
+│   ├── RUNNING.md                         — chuleta rápida do dia-a-dia + troubleshooting detalhado
+│   ├── TUTORIAL.md                        — passo a passo detalhado: criar a primeira Proxy Service na consola
+│   ├── CONCEITOS.md                       — arquitetura: WebLogic vs OSB, os 3 containers, o padrão Proxy→Pipeline→Business Service
+│   └── CONCEITOS-AVANCADOS.md             — sessões, tipagem REST, anatomia do Message Flow, clustering, segurança OPSS
 ├── docker/
 │   ├── setenv.sh                          — variáveis de ambiente do domínio OSB
 │   └── docker-compose.yml                 — domínio OSB-only (base de dados + Admin + Managed Server)
 └── test/
-    ├── httpbin.wadl                       — WADL de exemplo (recurso GET) usado no TUTORIAL.md
+    ├── httpbin.wadl                       — WADL de exemplo (recurso GET) usado no docs/TUTORIAL.md
     ├── test-proxy.sh                      — script curl para testar uma Proxy Service
     └── osb-test.postman_collection.json   — coleção Postman equivalente
 ```
@@ -209,8 +210,8 @@ Não precisas de repetir o fix da secção 4.1 — já está guardado na configu
 `volumes: soadb_orcl:` no fim do ficheiro — confirma com `git pull` se não tiveres a certeza.
 Sem isso, um `docker-compose down` + `up` cria um volume novo (vazio) para os dados reais da
 Oracle a cada vez, e o `osbas` falha com `ORA-01017: invalid username/password` (mesmo com a
-password certa — a schema é que deixou de existir). Ver `RUNNING.md` para o detalhe completo
-deste e de outros problemas comuns.
+password certa — a schema é que deixou de existir). Ver `docs/RUNNING.md` para o detalhe
+completo deste e de outros problemas comuns.
 
 ### 5. Aceder às consolas
 
@@ -219,19 +220,19 @@ deste e de outros problemas comuns.
 
 ### 6. Fazer o pequeno teste
 
-Ver **`TUTORIAL.md`** — guia detalhado, passo a passo, testado do início ao fim na consola,
+Ver **`docs/TUTORIAL.md`** — guia detalhado, passo a passo, testado do início ao fim na consola,
 para criar a primeira Business Service + Proxy Service + Pipeline e confirmar o ciclo completo:
 **cliente → Proxy Service → Pipeline → Route → Business Service → resposta**.
 
 Não é tão direto como parece à primeira vista — há pelo menos três armadilhas não óbvias da
 Service Bus Console 12c (REST "untyped" não funciona para invocar backends, uma Proxy tipada
 não pode invocar diretamente uma Business Service tipada com forma diferente, e a ação
-"Routing" só existe num nó Route dedicado, não num Stage normal) que o `TUTORIAL.md` explica e
-contorna.
+"Routing" só existe num nó Route dedicado, não num Stage normal) que o `docs/TUTORIAL.md`
+explica e contorna.
 
 Para perceberes *porque* o exercício está montado assim (o que cada camada — Proxy, Pipeline,
 Business Service — resolve, e o que o teste realmente prova sobre o ambiente), ver
-**`CONCEITOS.md`**.
+**`docs/CONCEITOS.md`**.
 
 No fim, testa com:
 
