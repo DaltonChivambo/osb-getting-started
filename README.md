@@ -140,6 +140,26 @@ docker logs -f osbms
   `shutdown hook`, falta a variável `ADMIN_PASSWORD` no serviço `osbms` do
   `docker-compose.yml`.
 
+### 4.1 Fix obrigatório, uma vez só: identity store embutido
+
+Na primeira vez que o domínio é criado, o login na Service Bus Console (e em qualquer página
+ADF autenticada) falha com um redirect para `errorPage.jspx`. A causa é um bug de
+incompatibilidade entre o JDK 8 incluído na imagem e código antigo do FMW: o identity store
+embutido (`libOVD`) tenta ligar-se via `ldap://[<ip-do-container>]:7001` — colocar um endereço
+IPv4 entre `[]`, como se fosse IPv6, faz o parser de URI mais recente rejeitar com
+`Malformed IPv6 address`. Corrige-se trocando o host dinâmico por `localhost` (correto aqui,
+porque é um identity store self-referencing, não precisa de ser alcançável de fora):
+
+```bash
+MSYS_NO_PATHCONV=1 docker exec osbas sed -i \
+  's|<host percentage="100" port="-1" readonly="false">%HOST%</host>|<host percentage="100" port="-1" readonly="false">localhost</host>|' \
+  /u01/oracle/user_projects/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml
+docker restart osbas
+```
+
+Isto vive na configuração do domínio (bind mount), por isso só precisas de fazer isto **uma
+vez** — sobrevive a `docker-compose down`/`up` normais. Ver `RUNNING.md` para mais detalhe.
+
 ### 5. Aceder às consolas
 
 - **WebLogic Admin Console**: http://localhost:7001/console (user: `weblogic`, password: a que definiste em `DC_ADMIN_PWD`)

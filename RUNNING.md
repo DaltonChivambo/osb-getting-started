@@ -143,14 +143,29 @@ de "Problemas comuns" abaixo).
   do ponto de vista dela é só uma base nova. Este `docker-compose.yml` já vem com o volume
   nomeado para evitar isto; se acontecer mesmo assim, confirma que a tua cópia está actualizada
   (`git pull`).
-- **`/servicebus` redireciona para `errorPage.jspx`**: normalmente indica um erro interno do
-  WebLogic/ADF, não um problema de configuração do proxy. Confirma no `as.log` (ver secção 2)
-  se há uma exceção pouco antes do pedido — por exemplo `java.net.URISyntaxException:
-  Malformed IPv6 address`, um bug de incompatibilidade entre o JDK 8 mais recente incluído na
-  imagem e código antigo do FMW que envolve endereços IPv4 em `[]` como se fossem IPv6. Este
-  `docker-compose.yml` já define `EXTRA_JAVA_PROPERTIES=-Djava.net.preferIPv4Stack=true` em
-  `osbas`/`osbms` precisamente para evitar isto — se ainda assim acontecer, confirma que a tua
-  cópia do `docker-compose.yml` tem essa variável.
+- **`/servicebus` redireciona para `errorPage.jspx`** (normalmente ao tentar fazer login, não
+  necessariamente ao carregar a página inicial): confirma no `as.log` (ver secção 2) se há
+  `java.net.URISyntaxException: Malformed IPv6 address at index 8: ldap://[172.20.0.x]:7001`.
+  É um bug de incompatibilidade entre o JDK 8 mais recente incluído na imagem e código antigo
+  do FMW (`libOVD`/`ArisID`) que envolve endereços IPv4 em `[]` como se fossem IPv6 ao construir
+  URLs LDAP para o identity store embutido. `EXTRA_JAVA_PROPERTIES=-Djava.net.preferIPv4Stack=true`
+  (já definido em `osbas`/`osbms`) **não chega sozinho** — só evita alguns casos, mas o login em
+  si continua a falhar. O fix real é editar a config do OVD para deixar de usar o IP dinâmico do
+  container:
+
+  ```bash
+  MSYS_NO_PATHCONV=1 docker exec osbas sed -i \
+    's|<host percentage="100" port="-1" readonly="false">%HOST%</host>|<host percentage="100" port="-1" readonly="false">localhost</host>|' \
+    /u01/oracle/user_projects/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml
+  docker restart osbas
+  ```
+
+  Isto troca o macro `%HOST%` (que se resolve para o IP dinâmico do container, ex:
+  `172.20.0.3` — daí o "endereço IPv6 malformado") por `localhost`, que é correto neste caso: é
+  o identity store embutido do próprio WebLogic, self-referencing, não precisa de ser
+  alcançável a partir de outros containers. Como isto vive no domínio (bind mount), só precisas
+  de fazer isto **uma vez** — sobrevive a `docker-compose down`/`up` normais. Confirmado por
+  login real (POST a `j_security_check`), não só por a página inicial carregar.
 - **`osbms` preso em "Waiting for the Managed Server to accept requests..."**: confirma no
   `ms.log` se há `Enter username to boot WebLogic server` seguido de `shutdown hook` — significa
   que falta `ADMIN_PASSWORD` no serviço `osbms`.
