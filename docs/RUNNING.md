@@ -1,7 +1,7 @@
 # Como correr o ambiente OSB (dia-a-dia)
 
 Este guia assume que já fizeste a configuração inicial (build da imagem `oracle/soasuite`,
-`docker-images` clonado, domínio já criado pelo menos uma vez — ver `README.md` para isso).
+`docker-images` clonado, domínio já criado pelo menos uma vez — ver `../README.md` para isso).
 Aqui é só o essencial para ligar/desligar o ambiente numa sessão normal de trabalho.
 
 ## 0. Pré-requisitos
@@ -104,7 +104,7 @@ este `docker-compose.yml` só cria container para `osb_server1`.)
 
 ## 5. Testar uma Proxy Service
 
-Depois de criares uma Proxy Service na Service Bus Console (ver passo 6 do `README.md`):
+Depois de criares uma Proxy Service na Service Bus Console (ver passo 6 do `../README.md`):
 
 ```bash
 cd test

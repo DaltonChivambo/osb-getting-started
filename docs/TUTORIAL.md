@@ -2,7 +2,7 @@
 
 Guia completo, testado do início ao fim na Service Bus Console, para criar o primeiro ciclo
 **cliente → Proxy Service → Pipeline → Route → Business Service → resposta**, usando o
-`httpbin.org/get` como backend de teste (ver README.md, secção "porquê httpbin.org", se
+`httpbin.org/get` como backend de teste (ver ../README.md, secção "porquê httpbin.org", se
 tiveres essa dúvida).
 
 Pré-requisito: ambiente a correr (ver `RUNNING.md`) e login feito em
