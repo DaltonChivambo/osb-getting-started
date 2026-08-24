@@ -147,6 +147,9 @@ cd test
 Uma resposta HTTP 200 com JSON do `httpbin.org` confirma o ciclo completo:
 **cliente → EchoTestPS → EchoTestPS_Pipeline → Route → HttpBinBS → httpbin.org → resposta**.
 
+Para perceberes o que aconteceu em cada salto — e o que os headers da resposta revelam sobre o
+que o OSB fez ao teu pedido — ver **`FLUXO.md`**.
+
 ## Resumo da estrutura final
 
 ```

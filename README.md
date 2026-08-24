@@ -22,6 +22,7 @@ Proxy → Pipeline → Business Service realmente resolve — ver **`docs/CONCEI
 ├── docs/
 │   ├── RUNNING.md                         — chuleta rápida do dia-a-dia + troubleshooting detalhado
 │   ├── TUTORIAL.md                        — passo a passo detalhado: criar a primeira Proxy Service na consola
+│   ├── FLUXO.md                           — o percurso de um pedido real, hop a hop, provado pela resposta do teste
 │   ├── CONCEITOS.md                       — arquitetura: WebLogic vs OSB, os 3 containers, o padrão Proxy→Pipeline→Business Service
 │   └── CONCEITOS-AVANCADOS.md             — sessões, tipagem REST, anatomia do Message Flow, clustering, segurança OPSS
 ├── docker/
@@ -322,6 +323,10 @@ cd test
 ```
 
 Ou importa `test/osb-test.postman_collection.json` no Postman.
+
+Depois de teres uma resposta 200, vale a pena ler **`docs/FLUXO.md`** — segue o percurso
+completo do pedido (browser/curl → localhost:9001 → Proxy → Pipeline → Business Service →
+backend → volta) e mostra o que cada linha da resposta prova sobre o que o OSB realmente fez.
 
 ### Parar / limpar
 
