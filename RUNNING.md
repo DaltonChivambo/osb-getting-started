@@ -19,8 +19,23 @@ Espera até `docker info` funcionar sem erro antes de continuares.
 a correr — as variáveis `DC_*` ficam todas por definir, o `docker-compose` recebe valores em
 branco, e vais ver avisos tipo `The "DC_ORCL_HOST" variable is not set` seguidos de erros como
 `invalid spec: :/opt/oracle/oradata: empty section between colons`. Se vires esses avisos, é
-sinal de que estás na shell errada — abre o **Git Bash** (menu Iniciar → "Git Bash", ou a
-partir do PowerShell: `& "C:\Program Files\Git\bin\bash.exe"`) e repete os comandos lá.
+sinal de que estás na shell errada.
+
+Duas formas de resolver:
+
+- **Abrir uma janela Git Bash a sério** — menu Iniciar → escreve "Git Bash" → Enter. O prompt
+  passa a ser do estilo `user@host MINGW64 ~/caminho$`, não `PS C:\...>`. É preciso ser mesmo
+  essa janela nova — correr `bash.exe` dentro do PowerShell sem mais nada normalmente só entra
+  num sub-shell interativo, o que confunde fácil.
+- **Ficar no PowerShell mas invocar o Git Bash só para o comando** — mais à prova de erro,
+  porque não depende de "estares na janela certa". Usa `bash.exe -lc "..."` com o comando
+  completo lá dentro:
+
+  ```powershell
+  & "C:\Program Files\Git\bin\bash.exe" -lc "cd '/d/caminho/para/o/repo/docker' && source ./setenv.sh && docker-compose up -d soadb"
+  ```
+
+  (ajusta o caminho ao teu clone; usa `/d/...` em vez de `D:\...`, com `/` em vez de `\`).
 
 ## 1. Subir o ambiente
 
