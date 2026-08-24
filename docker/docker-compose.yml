@@ -19,6 +19,15 @@ services:
       - ORACLE_PWD=${DC_ORCL_SYSPWD}
     volumes:
       - ${DC_ORCL_DBDATA}:/opt/oracle/oradata
+      # A imagem database/enterprise guarda os datafiles reais em /ORCL, um volume
+      # declarado internamente na própria imagem (não em /opt/oracle/oradata, que fica
+      # vazio). Sem esta entrada explícita, o Docker cria um volume anónimo novo (vazio)
+      # de cada vez que o container é recriado (ex: `docker-compose down` + `up`), e as
+      # schemas RCU já criadas ficam inacessíveis — o osbas falha com
+      # "ORA-01017: invalid username/password" mesmo com a password certa, porque a
+      # schema simplesmente deixou de existir na base "nova". Nomear o volume garante
+      # que sobrevive a um `down`/`up` normal (só `down -v` o apaga).
+      - soadb_orcl:/ORCL
 
   #
   # OSB Admin Server (console em :7001)
@@ -69,3 +78,7 @@ services:
       - EXTRA_JAVA_PROPERTIES=-Djava.net.preferIPv4Stack=true
     volumes:
       - ${DC_DDIR_OSB}:/u01/oracle/user_projects
+
+volumes:
+  soadb_orcl:
+    name: osb_soadb_orcl
