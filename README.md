@@ -10,7 +10,8 @@ de uma instalação on-prem completa.
 
 ```
 .
-├── README.md                              — este guia
+├── README.md                              — este guia (setup inicial, do zero)
+├── RUNNING.md                             — arrancar/parar o ambiente numa sessão normal
 ├── docker/
 │   ├── setenv.sh                          — variáveis de ambiente do domínio OSB
 │   └── docker-compose.yml                 — domínio OSB-only (base de dados + Admin + Managed Server)

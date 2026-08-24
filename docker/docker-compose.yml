@@ -40,6 +40,7 @@ services:
       - DB_SCHEMA_PASSWORD=${DC_RCU_SCHPWD}
       - RCUPREFIX=${DC_RCU_OSBPFX}
       - MANAGED_SERVER=osb_server1
+      - EXTRA_JAVA_PROPERTIES=-Djava.net.preferIPv4Stack=true
     volumes:
       - ${DC_DDIR_OSB}:/u01/oracle/user_projects
 
@@ -65,5 +66,6 @@ services:
       - MANAGED_SERVER=osb_server1
       - MANAGED_SERVER_CONTAINER=true
       - MANAGEDSERVER_PORT=9001
+      - EXTRA_JAVA_PROPERTIES=-Djava.net.preferIPv4Stack=true
     volumes:
       - ${DC_DDIR_OSB}:/u01/oracle/user_projects
