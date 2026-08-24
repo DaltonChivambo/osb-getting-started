@@ -29,6 +29,44 @@ WebLogic Server          ← o motor genérico: arranca processos Java, gere dep
 **O WebLogic não sabe nada de "Proxy Service" ou "Business Service"** — isso são conceitos do
 OSB. O WebLogic só fornece a infraestrutura onde o OSB corre como mais uma aplicação.
 
+### RCU e `createDomainAndStart.sh` — o que criaram o domínio
+
+**RCU** (**Repository Creation Utility**) é a ferramenta da Oracle que cria (ou apaga) as
+**schemas** numa base de dados Oracle, necessárias para produtos FMW (WebLogic, SOA, OSB)
+guardarem a sua configuração interna: segurança/políticas (`OPSS`), auditoria (`IAU`), metadata
+store (`MDS`), tabelas de infraestrutura comum (`STB`), etc. É a ferramenta por trás daquelas
+linhas nos logs do `osbas`:
+
+```
+Repository Creation Utility - Checking Prerequisites
+Creating Common Infrastructure Services(STB)
+Creating Audit Services Append(IAU_APPEND)
+Creating Metadata Services(MDS)
+...
+```
+
+Cada schema fica prefixada com o `RCUPREFIX` do `setenv.sh` (`OSB01`) — daí nomes como
+`OSB01_OPSS`. **Não é a tua base de dados de negócio** — é infraestrutura interna que o próprio
+WebLogic/OSB precisa para funcionar. (Foi exatamente isto que ficou em falta quando o volume
+`/ORCL` da `soadb` foi substituído por um novo, vazio, num `docker-compose down`+`up` sem o
+volume nomeado — as schemas RCU deixaram de existir, e o `osbas` falhou com `ORA-01017:
+invalid username/password`, que na realidade queria dizer "esta schema já não existe".)
+
+**`createDomainAndStart.sh`** é o script (do repositório oficial `oracle/docker-images`) que
+corre dentro do container `osbas` como o seu comando principal. Faz, por ordem, na primeira vez:
+
+1. **Corre o RCU** — cria as schemas na `soadb` (ou apaga+recria, se detetar que já existiam mas
+   incompletas — foi o que aconteceu ao resumir o `osbas` depois de uma interrupção a meio)
+2. **Cria o domínio WebLogic/OSB** — via WLST, gera a estrutura de ficheiros do domínio
+   (`infra_domain`) com os templates OSB
+3. **Arranca o AdminServer**
+
+Nas vezes seguintes é **idempotente**: verifica ficheiros-marcador (`RCU.OSB01.suc` e
+`SOA.DOMAINCFG.suc`, dentro de `/u01/oracle/user_projects/container/infra_domain/`) e, se já
+existirem, salta os passos 1 e 2, indo direto para o 3 — é por isso que se vê
+`"SOA RCU has already been loaded. Skipping..."` e `"Domain Already configured. Skipping..."`
+nos arranques seguintes (ver `RUNNING.md`, secção 4.2).
+
 ## 2. Os três containers e os seus papéis
 
 | Container | O que é | Para que serve |
