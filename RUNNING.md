@@ -123,8 +123,26 @@ docker-compose down          # para os containers, mantém os dados (domínio + 
 Não uses `docker-compose down -v` nem apagues `$DC_USERHOME` a não ser que queiras mesmo
 recomeçar do zero — isso obriga a correr o RCU e a criação do domínio outra vez (20-40 min).
 
+Um `docker-compose down` normal (sem `-v`) é seguro — os dados reais da BD Oracle vivem no
+volume nomeado `osb_soadb_orcl` (declarado neste `docker-compose.yml`), que sobrevive à
+remoção dos containers. **Isto só é verdade se a tua cópia do `docker-compose.yml` já tiver
+essa entrada `volumes: soadb_orcl:`** — sem ela, o Docker cria um volume anónimo novo (vazio)
+de cada vez que o `soadb` é recriado, e perdes as schemas RCU em silêncio (ver primeiro item
+de "Problemas comuns" abaixo).
+
 ## Problemas comuns
 
+- **`osbas` falha a arrancar com `ORA-01017: invalid username/password` no `as.log`**, mesmo
+  tendo a certeza de que a password em `setenv.sh` está certa: isto não é um problema de
+  password — é a schema RCU (`OSB01_OPSS`, etc.) que deixou de existir na base de dados. A
+  imagem `database/enterprise` guarda os datafiles reais em `/ORCL`, um volume *anónimo*
+  declarado dentro da própria imagem. Se o teu `docker-compose.yml` não tiver a entrada
+  `soadb_orcl:/ORCL` (e a secção `volumes: soadb_orcl:` no fim do ficheiro), um
+  `docker-compose down` + `up` recria esse volume vazio sem avisar, e a base "esquece-se" de
+  tudo o que o RCU criou — mesmo continuando a arrancar normalmente e a ficar `healthy`, porque
+  do ponto de vista dela é só uma base nova. Este `docker-compose.yml` já vem com o volume
+  nomeado para evitar isto; se acontecer mesmo assim, confirma que a tua cópia está actualizada
+  (`git pull`).
 - **`/servicebus` redireciona para `errorPage.jspx`**: normalmente indica um erro interno do
   WebLogic/ADF, não um problema de configuração do proxy. Confirma no `as.log` (ver secção 2)
   se há uma exceção pouco antes do pedido — por exemplo `java.net.URISyntaxException:
