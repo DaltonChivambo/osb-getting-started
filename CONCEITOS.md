@@ -144,3 +144,9 @@ neste ambiente Docker**:
 Troca o `httpbin.org` por um sistema teu, e a arquitetura (proxy/pipeline/routing) é
 exatamente a mesma. Este exercício é a base sobre a qual constróis qualquer integração real a
 seguir.
+
+## A seguir
+
+Para mecanismos mais profundos — o modelo de sessões da consola, porque a tipagem REST importa
+tecnicamente, a anatomia completa de um Message Flow (Stage vs Route Node), clustering, e
+segurança (OPSS) — ver **`CONCEITOS-AVANCADOS.md`**.

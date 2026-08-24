@@ -18,6 +18,7 @@ Proxy → Pipeline → Business Service realmente resolve — ver **`CONCEITOS.m
 ├── RUNNING.md                             — chuleta rápida do dia-a-dia + troubleshooting detalhado
 ├── TUTORIAL.md                            — passo a passo detalhado: criar a primeira Proxy Service na consola
 ├── CONCEITOS.md                           — arquitetura: WebLogic vs OSB, os 3 containers, o padrão Proxy→Pipeline→Business Service
+├── CONCEITOS-AVANCADOS.md                 — sessões, tipagem REST, anatomia do Message Flow, clustering, segurança OPSS
 ├── docker/
 │   ├── setenv.sh                          — variáveis de ambiente do domínio OSB
 │   └── docker-compose.yml                 — domínio OSB-only (base de dados + Admin + Managed Server)
