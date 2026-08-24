@@ -8,6 +8,10 @@ tiveres essa dúvida).
 Pré-requisito: ambiente a correr (ver `RUNNING.md`) e login feito em
 http://localhost:7001/servicebus (user `weblogic`, password de `DC_ADMIN_PWD`).
 
+Os passos de 1 a 7 são todos na Service Bus Console (no browser, nenhum terminal envolvido). Só
+o **passo 8** (o teste final) usa um comando de terminal — corre-o em **Git Bash**, não
+PowerShell/CMD (ver `../README.md`, secção "Pré-requisitos").
+
 ## Porque é preciso ler isto com atenção
 
 Este exercício parece trivial ("criar um proxy que chama um backend"), mas a Service Bus

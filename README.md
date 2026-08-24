@@ -37,12 +37,18 @@ Baseado em: https://github.com/oracle/docker-images/tree/main/OracleSOASuite
 
 - Docker Desktop instalado e a correr (o backend WSL2 é o recomendado pela própria Docker
   Desktop, mas não é preciso correr os comandos dentro de uma distro WSL2 — ver nota abaixo).
-- Corre os comandos abaixo numa shell bash (**Git Bash** no Windows serve perfeitamente,
-  ou uma distro WSL2 se preferires) — os scripts (`setenv.sh`) e os caminhos usados são
-  estilo Linux/POSIX. O Docker Desktop trata a tradução dos bind mounts (`$HOME/osb-docker/...`)
-  para o filesystem do Windows automaticamente quando corres a partir do Git Bash.
 - ~16 GB RAM livres e ~40 GB de disco.
 - Uma conta Oracle (gratuita) para aceitar as licenças.
+
+> **⚠️ Todos os blocos de código deste guia (e dos ficheiros em `docs/`) são bash — precisam de
+> Git Bash ou WSL2, não funcionam em PowerShell nem CMD.** `source ./setenv.sh`, `$VAR`, os
+> scripts `.sh`, tudo isto é sintaxe POSIX. Se estiveres numa janela PowerShell (prompt
+> `PS C:\...>`), abre uma janela **Git Bash** (menu Iniciar → "Git Bash") antes de continuares —
+> ou, sem sair do PowerShell, prefixa cada comando com
+> `& "C:\Program Files\Git\bin\bash.exe" -lc "..."` (ver `docs/RUNNING.md`, secção 0, para
+> exemplos concretos e os erros típicos que aparecem se tentares em PowerShell por engano).
+> O Docker Desktop trata a tradução dos bind mounts (`$HOME/osb-docker/...`) para o filesystem
+> do Windows automaticamente quando corres a partir do Git Bash.
 
 ### 1. Download dos binários (manual, na Oracle)
 
