@@ -50,9 +50,18 @@ Baseado em: https://github.com/oracle/docker-images/tree/main/OracleSOASuite
 
 Em https://edelivery.oracle.com, procura "Oracle SOA Suite" e baixa para a versão **12.2.1.4.0**:
 
-- `fmw_12.2.1.4.0_soa.jar`
-- `fmw_12.2.1.4.0_osb.jar`
-- `fmw_12.2.1.4.0_b2bhealthcare.jar`
+- `fmw_12.2.1.4.0_soa.jar` — instalador do **Oracle SOA Suite** propriamente dito (BPEL Process
+  Manager, Mediator, Human Workflow, Business Rules...). Mesmo num domínio "OSB-only" como o
+  nosso, é preciso — o OSB 12c partilha infraestrutura comum (JRF, bibliotecas partilhadas,
+  MDS) com o SOA Suite, e o instalador do OSB depende destes ficheiros estarem presentes.
+- `fmw_12.2.1.4.0_osb.jar` — instalador do **Oracle Service Bus** em si: a Service Bus Console,
+  o motor de pipelines, e os transports (REST, SOAP, JMS, FTP, Email...). É o produto que
+  efetivamente usamos no `TUTORIAL.md`.
+- `fmw_12.2.1.4.0_b2bhealthcare.jar` — instalador do módulo **B2B e Healthcare Integration**
+  (troca de documentos EDI/AS2 entre parceiros de negócio, e processamento de mensagens HL7
+  para interoperabilidade na área da saúde). Não usamos nada disto no exercício deste repo, mas
+  faz parte do mesmo pacote de instalação combinado do SOA Suite 12.2.1.4 e o `buildDockerImage.sh`
+  espera-o.
 
 #### 1.2. Imagem base (Oracle Fusion Middleware Infrastructure)
 
