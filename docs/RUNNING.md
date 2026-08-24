@@ -44,29 +44,39 @@ Corre a partir da pasta `docker/` deste repositório (os container names — `so
 
 ```bash
 cd docker
-source ./setenv.sh
+./start-osb.sh
+```
 
-ADAPTERS=$DC_USERHOME/osbdomain/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml
+O script sobe `soadb` → `osbas` → `osbms` pela ordem certa, espera que cada um fique pronto
+antes de avançar, e **aplica o fix obrigatório do `adapters.os_xml` nos dois momentos em que é
+preciso** (antes do `osbas` e outra vez antes do `osbms`). Se algum servidor falhar, mostra as
+últimas linhas do log e sai, em vez de ficar à espera indefinidamente. No fim imprime os URLs.
+
+⚠️ **Não subas os containers só com `docker-compose up` sem o fix.** Cada servidor acrescenta
+um bloco `<ldap>` ao `adapters.os_xml` ao arrancar; quem apanhar o ficheiro com 2 morre
+silenciosamente (`JPS-02592` / `duplicate keys` — o container fica `Up`, mas o Java já morreu).
+Depois de um arranque completo o ficheiro fica sempre com 2, por isso isto aplica-se a
+**todos** os arranques. Detalhe em "Problemas comuns", no fim deste documento.
+
+À mão, se precisares de controlar cada passo:
+
+```bash
+cd docker
+source ./setenv.sh
 
 # 1) Base de dados — espera por "DATABASE IS READY TO USE!"
 docker-compose up -d soadb
 docker logs -f soadb
 
 # 2) Admin Server — como o domínio já existe, salta RCU/criação e arranca direto
-grep -c "<ldap id=" $ADAPTERS   # TEM de ser 0 ou 1 (ver "Problemas comuns")
+./fix-adapters.sh
 docker-compose up -d osbas
 # acompanha pelo as.log, não pelo docker logs — ver secção 2
 
 # 3) Managed Server — expõe as Proxy Services em :9001/:9002
-grep -c "<ldap id=" $ADAPTERS   # o osbas acrescentou o dele: reduz a 1 outra vez
+./fix-adapters.sh    # o osbas acrescentou o dele: reduz a 1 outra vez
 docker-compose up -d osbms
 ```
-
-⚠️ **Os `grep` não são opcionais.** Cada servidor acrescenta um bloco `<ldap>` ao
-`adapters.os_xml` ao arrancar; quem apanhar o ficheiro com 2 morre silenciosamente
-(`JPS-02592` / `duplicate keys` — o container fica `Up`, mas o Java já morreu). Depois de um
-arranque completo o ficheiro fica sempre com 2, por isso isto aplica-se a **todos** os
-arranques. Detalhe e correção em "Problemas comuns", no fim deste documento.
 
 Com o domínio já criado, conta **~10 min** para o `osbas` chegar a `RUNNING` e outro tanto para
 o `osbms` — não os 20-40 min da primeira vez, mas também não é instantâneo.
@@ -257,23 +267,26 @@ de "Problemas comuns" abaixo).
   **2 blocos** — e o arranque *seguinte* falha logo no `osbas`. Não é uma corrupção pontual, é
   o comportamento normal deste ambiente.
 
-  **A regra prática: reduz o ficheiro a 1 bloco (ou 0) antes de cada arranque do stack.**
-  Verifica assim:
+  **A correção**, se já estás com um servidor em baixo:
 
   ```bash
-  MSYS_NO_PATHCONV=1 docker exec osbas grep -c "<ldap id=" \
-    /u01/oracle/user_projects/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml
+  cd docker
+  ./fix-adapters.sh                  # reduz a 1 bloco (faz backup em adapters.os_xml.bak)
+  docker-compose restart osbas       # ou osbms, conforme o que falhou
   ```
 
-  Para corrigir, edita **no host** (o ficheiro está no bind mount, em
-  `$DC_USERHOME/osbdomain/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml`):
-  faz backup, apaga os blocos `<ldap ...>…</ldap>` a mais deixando só o primeiro (são
-  idênticos, qualquer um serve), garante que o `</adapters>` continua no fim, e reinicia o
-  servidor afetado (`docker-compose restart osbas` ou `osbms`).
+  O `fix-adapters.sh` é idempotente — se o ficheiro já estiver bem, diz-te e não mexe. Para
+  veres o estado sem corrigir:
 
-  Se estiveres a subir o stack todo: reduz a 1 bloco → sobe o `osbas` e espera por `RUNNING` →
-  reduz outra vez a 1 bloco → sobe o `osbms`. Sem o segundo passo, o `osbms` apanha o ficheiro
-  com 2 (o `osbas` acabou de acrescentar o dele) e falha.
+  ```bash
+  grep -c "<ldap id=" \
+    "$DC_DDIR_OSB/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml"
+  ```
+
+  **Para não voltar a acontecer:** usa o `./start-osb.sh` (secção 1) em vez de `docker-compose
+  up` à mão — ele chama o `fix-adapters.sh` nos dois momentos necessários. Se subires à mão,
+  lembra-te de correr o fix **duas vezes**: antes do `osbas`, e outra vez antes do `osbms` (o
+  `osbas` acabou de acrescentar o bloco dele).
 
   Nota: o `sed` do fix do IPv6 (acima) é idempotente e **não** causa isto — podes corrê-lo mais
   do que uma vez sem problema. É o próprio FMW que acrescenta os blocos.

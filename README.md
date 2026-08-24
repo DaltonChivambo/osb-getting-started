@@ -26,7 +26,9 @@ Proxy → Pipeline → Business Service realmente resolve — ver **`docs/CONCEI
 │   └── CONCEITOS-AVANCADOS.md             — sessões, tipagem REST, anatomia do Message Flow, clustering, segurança OPSS
 ├── docker/
 │   ├── setenv.sh                          — variáveis de ambiente do domínio OSB
-│   └── docker-compose.yml                 — domínio OSB-only (base de dados + Admin + Managed Server)
+│   ├── docker-compose.yml                 — domínio OSB-only (base de dados + Admin + Managed Server)
+│   ├── start-osb.sh                       — sobe o stack todo pela ordem certa, com o fix aplicado e espera por cada servidor
+│   └── fix-adapters.sh                    — corrige o adapters.os_xml (bug do "duplicate keys"); chamado pelo start-osb.sh
 └── test/
     ├── httpbin.wadl                       — WADL de exemplo (recurso GET) usado no docs/TUTORIAL.md
     ├── test-proxy.sh                      — script curl para testar uma Proxy Service
@@ -237,39 +239,49 @@ Depois da primeira vez, o domínio e as schemas RCU já existem, guardados em:
 - **Domínio WebLogic/OSB (config, o fix da secção 4.1, etc.)**: bind mount em
   `$DC_USERHOME/osbdomain` (pasta normal no teu disco) — sobrevive sempre, mesmo a `down -v`.
 
-Arrancar de novo são os mesmos três comandos da secção 4 — desta vez o `osbas` deteta que o
-domínio já existe e salta o RCU/criação, arrancando em ~10 min em vez de 20-40. **Mas há um
-passo extra obrigatório entre eles**, explicado a seguir ao bloco:
+Desta vez o `osbas` deteta que o domínio já existe e salta o RCU/criação, arrancando em ~10 min
+em vez de 20-40. **Usa o script** — ele sobe os três containers pela ordem certa, aplica o fix
+obrigatório do `adapters.os_xml` nos dois momentos em que é preciso, e espera que cada servidor
+chegue a `RUNNING` antes de passar ao seguinte:
 
 ```bash
-cd docker-images/OracleSOASuite/osb-domain
-source setenv.sh
+cd docker
+./start-osb.sh
+```
 
-ADAPTERS=$DC_USERHOME/osbdomain/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml
+No fim imprime os URLs das consolas. Se algum servidor falhar, mostra as últimas linhas do log
+em vez de ficar à espera para sempre.
+
+**Porquê é preciso um script e não só três `docker-compose up`:** cada servidor acrescenta um
+bloco `<ldap id="DefaultAuthenticator">` ao `adapters.os_xml` quando arranca, e como os dois
+containers partilham o mesmo domínio escrevem no mesmo ficheiro. Um servidor que encontre o
+ficheiro já com 2 blocos morre com `JPS-02592` / `duplicate keys` — o container fica `Up`, mas
+o processo Java suicida-se e a consola nunca responde. Depois de um arranque completo o
+ficheiro fica sempre com 2, por isso tem de ser reduzido a 1 **antes de cada arranque, e outra
+vez entre o `osbas` e o `osbms`**. É isso que o `start-osb.sh` trata (via `fix-adapters.sh`).
+
+Se preferires fazer à mão, o equivalente é:
+
+```bash
+cd docker
+source ./setenv.sh
 
 docker-compose up -d soadb
 docker logs -f soadb          # espera por "DATABASE IS READY TO USE!"
 
-grep -c "<ldap id=" $ADAPTERS  # tem de ser 0 ou 1 — se for 2+, ver docs/RUNNING.md
+./fix-adapters.sh             # reduz o adapters.os_xml a 1 bloco <ldap>
 docker-compose up -d osbas
 MSYS_NO_PATHCONV=1 docker exec osbas tail -f \
   /u01/oracle/user_projects/domains/infra_domain/logs/as.log
 # procura "SOA RCU has already been loaded. Skipping..." e depois "RUNNING mode"
-# (~10 min: o grosso do tempo é o deploy das aplicações do Service Bus)
 
-grep -c "<ldap id=" $ADAPTERS  # o osbas acabou de acrescentar o dele — volta a reduzir a 1
+./fix-adapters.sh             # o osbas acabou de acrescentar o dele — reduz outra vez
 docker-compose up -d osbms
 MSYS_NO_PATHCONV=1 docker exec osbms tail -f \
   /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
 ```
 
-**Porquê os `grep`:** cada servidor acrescenta um bloco `<ldap id="DefaultAuthenticator">` ao
-`adapters.os_xml` quando arranca, e como os dois containers partilham o mesmo domínio escrevem
-no mesmo ficheiro. Um servidor que encontre o ficheiro já com 2 blocos morre com `JPS-02592` /
-`duplicate keys` (container fica `Up`, mas o processo Java suicida-se e a consola nunca
-responde). Depois de um arranque completo o ficheiro fica com 2 — por isso **tens de o reduzir
-a 1 antes de cada arranque, e outra vez entre o `osbas` e o `osbms`**. O procedimento de
-correção está em `docs/RUNNING.md`, "Problemas comuns".
+Detalhe completo do problema em `docs/RUNNING.md`, "Problemas comuns".
 
 Não precisas de repetir o fix da secção 4.1 — já está guardado na configuração do domínio.
 

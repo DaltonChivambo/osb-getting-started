@@ -1,0 +1,4 @@
+# Os scripts deste repo sao bash e correm dentro de containers Linux ou em Git Bash.
+# Sem isto, num Windows com core.autocrlf=true o Git faz checkout com CRLF e o bash
+# rebenta logo na primeira linha com erros do tipo: $'\r': command not found
+*.sh text eol=lf
