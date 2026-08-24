@@ -12,10 +12,12 @@ de uma instalação on-prem completa.
 .
 ├── README.md                              — este guia (setup do zero + primeira vez vs. vezes seguintes)
 ├── RUNNING.md                             — chuleta rápida do dia-a-dia + troubleshooting detalhado
+├── TUTORIAL.md                            — passo a passo detalhado: criar a primeira Proxy Service na consola
 ├── docker/
 │   ├── setenv.sh                          — variáveis de ambiente do domínio OSB
 │   └── docker-compose.yml                 — domínio OSB-only (base de dados + Admin + Managed Server)
 └── test/
+    ├── httpbin.wadl                       — WADL de exemplo (recurso GET) usado no TUTORIAL.md
     ├── test-proxy.sh                      — script curl para testar uma Proxy Service
     └── osb-test.postman_collection.json   — coleção Postman equivalente
 ```
@@ -211,24 +213,24 @@ deste e de outros problemas comuns.
 
 ### 6. Fazer o pequeno teste
 
-Na Service Bus Console:
+Ver **`TUTORIAL.md`** — guia detalhado, passo a passo, testado do início ao fim na consola,
+para criar a primeira Business Service + Proxy Service + Pipeline e confirmar o ciclo completo:
+**cliente → Proxy Service → Pipeline → Route → Business Service → resposta**.
 
-1. Cria um **Business Service** REST apontando para, por exemplo, `https://httpbin.org/get`.
-2. Cria uma **Proxy Service** REST (ex: path `/echo/test`) com uma rota simples para essa
-   Business Service.
-3. Ativa (*Activate*) as mudanças na sessão.
+Não é tão direto como parece à primeira vista — há pelo menos três armadilhas não óbvias da
+Service Bus Console 12c (REST "untyped" não funciona para invocar backends, uma Proxy tipada
+não pode invocar diretamente uma Business Service tipada com forma diferente, e a ação
+"Routing" só existe num nó Route dedicado, não num Stage normal) que o `TUTORIAL.md` explica e
+contorna.
 
-Depois testa com um dos scripts em `test/`:
+No fim, testa com:
 
 ```bash
 cd test
-./test-proxy.sh /echo/test
+./test-proxy.sh /echotest
 ```
 
 Ou importa `test/osb-test.postman_collection.json` no Postman.
-
-Uma resposta HTTP 200 vinda do `httpbin.org` através do OSB confirma o ciclo completo:
-**cliente → Proxy Service → pipeline → Business Service → resposta**.
 
 ### Parar / limpar
 

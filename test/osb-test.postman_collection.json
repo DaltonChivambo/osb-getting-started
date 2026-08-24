@@ -36,7 +36,7 @@
       "request": {
         "method": "GET",
         "url": {
-          "raw": "http://localhost:9001/echo/test",
+          "raw": "http://localhost:9001/echotest",
           "protocol": "http",
           "host": ["localhost"],
           "port": "9001",
