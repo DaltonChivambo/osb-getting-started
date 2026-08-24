@@ -25,9 +25,12 @@ Baseado em: https://github.com/oracle/docker-images/tree/main/OracleSOASuite
 
 ### 0. Pré-requisitos
 
-- Docker Desktop, com o **WSL2 backend** ativo, e uma distro WSL2 (ex: Ubuntu) instalada.
-- Corre todos os comandos abaixo **dentro da shell WSL2** (não no PowerShell/CMD), porque os
-  scripts e caminhos são Linux.
+- Docker Desktop instalado e a correr (o backend WSL2 é o recomendado pela própria Docker
+  Desktop, mas não é preciso correr os comandos dentro de uma distro WSL2 — ver nota abaixo).
+- Corre os comandos abaixo numa shell bash (**Git Bash** no Windows serve perfeitamente,
+  ou uma distro WSL2 se preferires) — os scripts (`setenv.sh`) e os caminhos usados são
+  estilo Linux/POSIX. O Docker Desktop trata a tradução dos bind mounts (`$HOME/osb-docker/...`)
+  para o filesystem do Windows automaticamente quando corres a partir do Git Bash.
 - ~16 GB RAM livres e ~40 GB de disco.
 - Uma conta Oracle (gratuita) para aceitar as licenças.
 
@@ -111,6 +114,30 @@ docker logs -f osbas
 docker-compose up -d osbms
 docker logs -f osbms
 ```
+
+**Notas sobre o arranque:**
+
+- O `docker logs -f` do `osbas`/`osbms` só mostra o *wrapper* do container script. O log real
+  do WebLogic (RCU, criação do domínio, boot do servidor) fica dentro do container, em
+  `/u01/oracle/user_projects/domains/infra_domain/logs/as.log` (Admin Server) ou
+  `.../logs/osb_server1/ms.log` (Managed Server). Para acompanhar o progresso real:
+
+  ```bash
+  docker exec osbas tail -f /u01/oracle/user_projects/domains/infra_domain/logs/as.log
+  docker exec osbms tail -f /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
+  ```
+
+- `docker ps` pode mostrar os containers como `(unhealthy)` ou `(health: starting)` durante
+  vários minutos depois de o log já dizer `The server started in RUNNING mode.` — o healthcheck
+  demora um pouco a apanhar o estado novo. Não é sinal de erro por si só; confia na mensagem
+  `RUNNING mode` no log.
+- Se o `osbms` ficar preso indefinidamente em "Waiting for the Managed Server to accept
+  requests..." sem nunca avançar nem o container morrer, o mais provável é o processo Java ter
+  morrido logo a seguir a arrancar (por exemplo, por falta de `boot.properties`) e o script
+  wrapper ficou à espera de uma linha no log que nunca vai aparecer. Confirma sempre no
+  `ms.log` (comando acima) — se vires `Enter username to boot WebLogic server` seguido de
+  `shutdown hook`, falta a variável `ADMIN_PASSWORD` no serviço `osbms` do
+  `docker-compose.yml`.
 
 ### 5. Aceder às consolas
 
