@@ -65,7 +65,7 @@ Nas vezes seguintes é **idempotente**: verifica ficheiros-marcador (`RCU.OSB01.
 `SOA.DOMAINCFG.suc`, dentro de `/u01/oracle/user_projects/container/infra_domain/`) e, se já
 existirem, salta os passos 1 e 2, indo direto para o 3 — é por isso que se vê
 `"SOA RCU has already been loaded. Skipping..."` e `"Domain Already configured. Skipping..."`
-nos arranques seguintes (ver `RUNNING.md`, secção 4.2).
+nos arranques seguintes (ver `../README.md`, secção 4.2).
 
 ## 2. Os três containers e os seus papéis
 
@@ -85,8 +85,8 @@ ambos dependem do `soadb` por baixo.
   mais antiga (Struts).
 - **`:7001/servicebus`** (Service Bus Console) — faz parte do **produto OSB**, instalada por
   cima do WebLogic. É onde criámos a Business Service e a Proxy Service. Construída com
-  **Oracle ADF Faces** (é por isso que apanhámos bugs específicos de ADF — o `Malformed IPv6
-  address` no login e o erro do `200.js` — que nada têm a ver com o `console` genérico).
+  **Oracle ADF Faces** — é por isso que os bugs de login que apanhámos (o `Malformed IPv6
+  address`, ver `RUNNING.md`) afetam esta consola e não o `console` genérico.
 
 Ambas são apps Java normais (`.war`/`.ear`) **deployadas no `osbas`** — por isso só existem em
 `:7001`, nunca em `:9001`/`:9002` (esses são só tráfego runtime, sem interface).

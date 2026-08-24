@@ -2,8 +2,8 @@
 
 Guia completo, testado do início ao fim na Service Bus Console, para criar o primeiro ciclo
 **cliente → Proxy Service → Pipeline → Route → Business Service → resposta**, usando o
-`httpbin.org/get` como backend de teste (ver ../README.md, secção "porquê httpbin.org", se
-tiveres essa dúvida).
+`httpbin.org/get` como backend de teste (ver `CONCEITOS.md`, secção "O que o teste concreto
+prova", se te interessa porquê o httpbin.org e o que isto realmente demonstra).
 
 Pré-requisito: ambiente a correr (ver `RUNNING.md`) e login feito em
 http://localhost:7001/servicebus (user `weblogic`, password de `DC_ADMIN_PWD`).

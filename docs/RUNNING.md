@@ -46,40 +46,96 @@ Corre a partir da pasta `docker/` deste repositório (os container names — `so
 cd docker
 source ./setenv.sh
 
+ADAPTERS=$DC_USERHOME/osbdomain/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml
+
 # 1) Base de dados — espera por "DATABASE IS READY TO USE!"
 docker-compose up -d soadb
 docker logs -f soadb
 
 # 2) Admin Server — como o domínio já existe, salta RCU/criação e arranca direto
+grep -c "<ldap id=" $ADAPTERS   # TEM de ser 0 ou 1 (ver "Problemas comuns")
 docker-compose up -d osbas
-docker logs -f osbas
+# acompanha pelo as.log, não pelo docker logs — ver secção 2
 
 # 3) Managed Server — expõe as Proxy Services em :9001/:9002
+grep -c "<ldap id=" $ADAPTERS   # o osbas acrescentou o dele: reduz a 1 outra vez
 docker-compose up -d osbms
-docker logs -f osbms
 ```
 
-Numa máquina onde o domínio já foi criado, isto demora poucos minutos (arranque normal do
-WebLogic), não os 20-40 min da primeira vez.
+⚠️ **Os `grep` não são opcionais.** Cada servidor acrescenta um bloco `<ldap>` ao
+`adapters.os_xml` ao arrancar; quem apanhar o ficheiro com 2 morre silenciosamente
+(`JPS-02592` / `duplicate keys` — o container fica `Up`, mas o Java já morreu). Depois de um
+arranque completo o ficheiro fica sempre com 2, por isso isto aplica-se a **todos** os
+arranques. Detalhe e correção em "Problemas comuns", no fim deste documento.
 
-## 2. Acompanhar o progresso real
+Com o domínio já criado, conta **~10 min** para o `osbas` chegar a `RUNNING` e outro tanto para
+o `osbms` — não os 20-40 min da primeira vez, mas também não é instantâneo.
 
-O `docker logs` dos containers `osbas`/`osbms` só mostra o *wrapper* do script. O boot real do
-WebLogic fica dentro do container:
+## 2. Acompanhar o progresso real (os logs)
+
+**Não uses `docker logs -f osbas` para isto.** Esse comando só mostra o *wrapper*
+(`createDomainAndStart.sh`), que diz pouco mais que "a criar domínio…" e depois fica calado. O
+trabalho real — RCU, deploy das aplicações, `RUNNING mode`, e sobretudo os stack traces quando
+algo falha — sai todo para o `as.log` dentro do container.
+
+O `as.log` é o **stdout/stderr do processo Java do servidor** — o que verias no terminal se
+arrancasses o WebLogic à mão com `startWebLogic.sh`. O script do container redireciona essa
+saída para ficheiro.
 
 ```bash
-# Admin Server
-docker exec osbas tail -f /u01/oracle/user_projects/domains/infra_domain/logs/as.log
+# Admin Server (osbas)
+MSYS_NO_PATHCONV=1 docker exec osbas tail -f \
+  /u01/oracle/user_projects/domains/infra_domain/logs/as.log
 
-# Managed Server
-docker exec osbms tail -f /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
+# Managed Server (osbms)
+MSYS_NO_PATHCONV=1 docker exec osbms tail -f \
+  /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
 ```
 
-Procura pela linha `The server started in RUNNING mode.` — é o sinal definitivo de que arrancou.
+> O `MSYS_NO_PATHCONV=1` é obrigatório em Git Bash: sem ele o MSYS "traduz" `/u01/oracle/...`
+> para `C:/Program Files/Git/u01/oracle/...` antes de entregar ao Docker, e recebes
+> `cannot open '.../as.log'` com um caminho Windows estranho no meio.
+
+### Os ficheiros de log do domínio
+
+Todos relativos a `/u01/oracle/user_projects/domains/infra_domain/`:
+
+| Ficheiro | O que contém |
+|---|---|
+| `logs/as.log` | stdout do **Admin Server** — arranque, RCU, deploys, **stack traces de falha**. É aqui que se diagnostica um arranque que não chega ao fim. |
+| `logs/osb_server1/ms.log` | o mesmo, para o **Managed Server** (`osbms`) |
+| `logs/aslisten.log` | o script que espera o Admin Server ficar disponível (raramente útil) |
+| `servers/AdminServer/logs/AdminServer.log` | log **estruturado** do WebLogic (formato ODL, `####<data> <nível> <subsistema>`) — mais limpo para investigar runtime depois de estar RUNNING |
+| `servers/AdminServer/logs/access.log` | pedidos HTTP às consolas |
+| `servers/AdminServer/logs/AdminServer-diagnostic*.log` | diagnósticos internos (WLDF) — ficheiros de 10 MB cada, raramente úteis aqui |
+
+Na prática: **`as.log`/`ms.log` para arranque e falhas**, `AdminServer.log` para runtime.
+
+### Confirmar que arrancou
+
+O sinal definitivo é a linha `The server started in RUNNING mode.` no `as.log`/`ms.log`. Três
+formas de a apanhar:
+
+```bash
+# a) seguir ao vivo (Ctrl+C para sair)
+MSYS_NO_PATHCONV=1 docker exec osbas tail -f \
+  /u01/oracle/user_projects/domains/infra_domain/logs/as.log
+
+# b) verificação rápida sim/não — 0 = ainda não, 1 = já arrancou
+MSYS_NO_PATHCONV=1 docker exec osbas grep -c "RUNNING mode" \
+  /u01/oracle/user_projects/domains/infra_domain/logs/as.log
+
+# c) pela consola — 000 = ainda não aceita ligações, 302 = pronto
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:7001/console
+```
 
 `docker ps` pode mostrar `(unhealthy)` ou `(health: starting)` durante um bocado mesmo depois de
-aparecer `RUNNING mode` no log — o healthcheck demora um pouco a apanhar o estado novo. Não é
-erro por si só.
+aparecer `RUNNING mode` no log — o healthcheck demora a apanhar o estado novo. Não é erro por
+si só; confia no log.
+
+Ordem de grandeza, com o domínio já criado: `soadb` fica pronta em ~2-3 min, o `osbas` demora
+**~10 min** até `RUNNING` (o grosso é o deploy das aplicações do Service Bus — vais ver
+Coherence e ADF Faces a inicializar perto do fim), e o `osbms` outro tanto.
 
 ## 3. Verificar que está tudo bem
 
@@ -88,6 +144,12 @@ docker ps --filter name=soadb --filter name=osbas --filter name=osbms
 ```
 
 Os três devem aparecer `Up ... (healthy)`.
+
+⚠️ **`Up` não quer dizer que o servidor está vivo.** Se o processo Java do WebLogic morrer
+depois de arrancar (é o que acontece no problema do `duplicate keys`, ver "Problemas comuns"),
+o container continua `Up` e o `docker logs` não mostra nada de anormal — mas a consola nunca
+responde. Um container `Up` há muito tempo e ainda `(health: starting)` é sinal disto: vai
+confirmar ao `as.log`/`ms.log`.
 
 Confirmação definitiva (mais fiável que o healthcheck do Docker): entra no
 **WebLogic Admin Console** → *Environment → Servers* e confirma que `AdminServer` e
@@ -166,6 +228,55 @@ de "Problemas comuns" abaixo).
   alcançável a partir de outros containers. Como isto vive no domínio (bind mount), só precisas
   de fazer isto **uma vez** — sobrevive a `docker-compose down`/`up` normais. Confirmado por
   login real (POST a `j_security_check`), não só por a página inicial carregar.
+- **`osbas` ou `osbms` morre no arranque com `JPS-02592` / `duplicate keys`** — este é o
+  problema mais chato deste setup, porque **volta a acontecer sozinho**. No `as.log`/`ms.log`:
+
+  ```
+  SEVERE: Failed to push ldap config data to libOvd for service instance "idstore.ldap"
+  oracle.xml.parser.v2.XMLParseException; Identity constraint validation error: 'duplicate keys'
+  <BEA-000365> <Server state changed to FAILED.>
+  <BEA-000383> <A critical service failed. The server will shut itself down.>
+  ```
+
+  O container fica `Up` (e o `docker logs` não mostra nada de estranho) mas o processo Java já
+  se suicidou — a consola nunca responde.
+
+  **O mecanismo** (confirmado em execução): no arranque, cada servidor lê o
+  `adapters.os_xml` e **acrescenta-lhe um bloco `<ldap id="DefaultAuthenticator">`**. Como os
+  dois containers partilham o mesmo domínio (o bind mount `$DC_USERHOME/osbdomain`), escrevem
+  ambos no mesmo ficheiro. Dois blocos com o mesmo `id` violam uma constraint de chave única do
+  schema, e o servidor que apanhar o ficheiro já com 2 rebenta antes de o OPSS arrancar. Na
+  prática:
+
+  | Blocos no ficheiro ao arrancar | Resultado |
+  |---|---|
+  | 0 ou 1 | arranca bem — e deixa o ficheiro com +1 bloco |
+  | 2 ou mais | `duplicate keys` → `FAILED` |
+
+  Ou seja: depois de um arranque completo bem sucedido (`osbas` + `osbms`), o ficheiro fica com
+  **2 blocos** — e o arranque *seguinte* falha logo no `osbas`. Não é uma corrupção pontual, é
+  o comportamento normal deste ambiente.
+
+  **A regra prática: reduz o ficheiro a 1 bloco (ou 0) antes de cada arranque do stack.**
+  Verifica assim:
+
+  ```bash
+  MSYS_NO_PATHCONV=1 docker exec osbas grep -c "<ldap id=" \
+    /u01/oracle/user_projects/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml
+  ```
+
+  Para corrigir, edita **no host** (o ficheiro está no bind mount, em
+  `$DC_USERHOME/osbdomain/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml`):
+  faz backup, apaga os blocos `<ldap ...>…</ldap>` a mais deixando só o primeiro (são
+  idênticos, qualquer um serve), garante que o `</adapters>` continua no fim, e reinicia o
+  servidor afetado (`docker-compose restart osbas` ou `osbms`).
+
+  Se estiveres a subir o stack todo: reduz a 1 bloco → sobe o `osbas` e espera por `RUNNING` →
+  reduz outra vez a 1 bloco → sobe o `osbms`. Sem o segundo passo, o `osbms` apanha o ficheiro
+  com 2 (o `osbas` acabou de acrescentar o dele) e falha.
+
+  Nota: o `sed` do fix do IPv6 (acima) é idempotente e **não** causa isto — podes corrê-lo mais
+  do que uma vez sem problema. É o próprio FMW que acrescenta os blocos.
 - **`osbms` preso em "Waiting for the Managed Server to accept requests..."**: confirma no
   `ms.log` se há `Enter username to boot WebLogic server` seguido de `shutdown hook` — significa
   que falta `ADMIN_PASSWORD` no serviço `osbms`.

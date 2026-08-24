@@ -174,18 +174,21 @@ docker logs -f osbms
 **Notas sobre o arranque:**
 
 - O `docker logs -f` do `osbas`/`osbms` só mostra o *wrapper* do container script. O log real
-  do WebLogic (RCU, criação do domínio, boot do servidor) fica dentro do container, em
-  `/u01/oracle/user_projects/domains/infra_domain/logs/as.log` (Admin Server) ou
-  `.../logs/osb_server1/ms.log` (Managed Server). Para acompanhar o progresso real:
+  do WebLogic (RCU, criação do domínio, boot do servidor, e os stack traces quando algo falha)
+  fica dentro do container. Para acompanhar o progresso real:
 
   ```bash
-  docker exec osbas tail -f /u01/oracle/user_projects/domains/infra_domain/logs/as.log
-  docker exec osbms tail -f /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
+  MSYS_NO_PATHCONV=1 docker exec osbas tail -f \
+    /u01/oracle/user_projects/domains/infra_domain/logs/as.log
+
+  MSYS_NO_PATHCONV=1 docker exec osbms tail -f \
+    /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
   ```
 
-  (Em Git Bash, se `docker exec` disser `cannot open '.../logs/as.log'` com um caminho que
-  começou por `C:/Program Files/Git/...`, o MSYS está a "traduzir" o caminho Linux para Windows.
-  Prefixa o comando com `MSYS_NO_PATHCONV=1`.)
+  O `MSYS_NO_PATHCONV=1` evita que o Git Bash traduza `/u01/oracle/...` para
+  `C:/Program Files/Git/u01/oracle/...` (sintoma: `cannot open '.../as.log'`). Para o mapa
+  completo dos ficheiros de log do domínio e as formas de confirmar o arranque, ver
+  `docs/RUNNING.md`, secção 2.
 
 - `docker ps` pode mostrar os containers como `(unhealthy)` ou `(health: starting)` durante
   vários minutos depois de o log já dizer `The server started in RUNNING mode.` — o healthcheck
@@ -221,6 +224,10 @@ vez por domínio criado** — sobrevive a paragens/arranques normais (secção 4
 repetir se apagares o domínio todo (`rm -rf $DC_USERHOME/osbdomain` ou equivalente) e deixares
 o `createDomainAndStart.sh` recriá-lo do zero.
 
+O `sed` acima é idempotente (podes corrê-lo mais do que uma vez sem estragar nada). Se algum dia
+o `osbas` deixar de arrancar de todo, com `JPS-02592` e `duplicate keys` no `as.log`, é este
+mesmo ficheiro com o bloco `<ldap>` duplicado — ver `docs/RUNNING.md`, "Problemas comuns".
+
 ### 4.2 Subir o ambiente — vezes seguintes (domínio e BD já existem)
 
 Depois da primeira vez, o domínio e as schemas RCU já existem, guardados em:
@@ -230,24 +237,39 @@ Depois da primeira vez, o domínio e as schemas RCU já existem, guardados em:
 - **Domínio WebLogic/OSB (config, o fix da secção 4.1, etc.)**: bind mount em
   `$DC_USERHOME/osbdomain` (pasta normal no teu disco) — sobrevive sempre, mesmo a `down -v`.
 
-Ou seja, arrancar de novo é só isto — os mesmos três comandos da secção 4, mas desta vez
-`osbas` deteta que o domínio já existe e salta o RCU/criação, arrancando em minutos em vez de
-20-40:
+Arrancar de novo são os mesmos três comandos da secção 4 — desta vez o `osbas` deteta que o
+domínio já existe e salta o RCU/criação, arrancando em ~10 min em vez de 20-40. **Mas há um
+passo extra obrigatório entre eles**, explicado a seguir ao bloco:
 
 ```bash
 cd docker-images/OracleSOASuite/osb-domain
 source setenv.sh
 
+ADAPTERS=$DC_USERHOME/osbdomain/domains/infra_domain/config/fmwconfig/ovd/default/adapters.os_xml
+
 docker-compose up -d soadb
 docker logs -f soadb          # espera por "DATABASE IS READY TO USE!"
 
+grep -c "<ldap id=" $ADAPTERS  # tem de ser 0 ou 1 — se for 2+, ver docs/RUNNING.md
 docker-compose up -d osbas
-docker exec osbas tail -f /u01/oracle/user_projects/domains/infra_domain/logs/as.log
+MSYS_NO_PATHCONV=1 docker exec osbas tail -f \
+  /u01/oracle/user_projects/domains/infra_domain/logs/as.log
 # procura "SOA RCU has already been loaded. Skipping..." e depois "RUNNING mode"
+# (~10 min: o grosso do tempo é o deploy das aplicações do Service Bus)
 
+grep -c "<ldap id=" $ADAPTERS  # o osbas acabou de acrescentar o dele — volta a reduzir a 1
 docker-compose up -d osbms
-docker exec osbms tail -f /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
+MSYS_NO_PATHCONV=1 docker exec osbms tail -f \
+  /u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log
 ```
+
+**Porquê os `grep`:** cada servidor acrescenta um bloco `<ldap id="DefaultAuthenticator">` ao
+`adapters.os_xml` quando arranca, e como os dois containers partilham o mesmo domínio escrevem
+no mesmo ficheiro. Um servidor que encontre o ficheiro já com 2 blocos morre com `JPS-02592` /
+`duplicate keys` (container fica `Up`, mas o processo Java suicida-se e a consola nunca
+responde). Depois de um arranque completo o ficheiro fica com 2 — por isso **tens de o reduzir
+a 1 antes de cada arranque, e outra vez entre o `osbas` e o `osbms`**. O procedimento de
+correção está em `docs/RUNNING.md`, "Problemas comuns".
 
 Não precisas de repetir o fix da secção 4.1 — já está guardado na configuração do domínio.
 
