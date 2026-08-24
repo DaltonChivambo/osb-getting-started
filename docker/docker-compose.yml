@@ -1,5 +1,3 @@
-version: "3.0"
-
 # Domínio OSB-only, adaptado de:
 # oracle/docker-images/OracleSOASuite/samples/docker-compose.yml
 # (removidos os serviços soaas/soams/bpmas/bpmms, que não são
@@ -30,7 +28,7 @@ services:
     container_name: osbas
     depends_on:
       - soadb
-    command: /bin/bash -c "sleep 5s; /u01/oracle/dockertools/createDomainAndStart.sh"
+    command: /bin/bash -c "sleep 5s; /u01/oracle/container-scripts/createDomainAndStart.sh"
     ports:
       - "7001:7001"
     environment:
@@ -53,15 +51,16 @@ services:
     container_name: osbms
     depends_on:
       - osbas
-    command: /bin/bash -c "/u01/oracle/dockertools/startMS.sh"
+    command: /bin/bash -c "/u01/oracle/container-scripts/startMS.sh"
     ports:
       - "9001:9001"
       - "9002:9002"
     environment:
       - DOMAIN_TYPE=osb
-      - ADMIN_HOST=${DC_HOSTNAME}
+      - ADMIN_HOST=osbas
       - ADMIN_PORT=7001
-      - adminhostname=${DC_HOSTNAME}
+      - ADMIN_PASSWORD=${DC_ADMIN_PWD}
+      - adminhostname=osbas
       - adminport=7001
       - MANAGED_SERVER=osb_server1
     volumes:

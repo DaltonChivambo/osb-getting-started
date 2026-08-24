@@ -30,11 +30,15 @@ exportComposeEnv() {
   # --- Base de dados Oracle (usada para as schemas RCU do OSB) ---
   export DC_ORCL_PORT=1521
   export DC_ORCL_OEM_PORT=5500
-  export DC_ORCL_SID=soadb
-  export DC_ORCL_PDB=soapdb
+  # NOTA: a imagem "database/enterprise" do Container Registry ignora
+  # ORACLE_SID/ORACLE_PDB e cria sempre com estes nomes fixos.
+  export DC_ORCL_SID=ORCLCDB
+  export DC_ORCL_PDB=orclpdb1.localdomain
   # DEFINE UMA PASSWORD (min. 8 chars, 1 maiúscula, 1 número)
   export DC_ORCL_SYSPWD="MudaEsta1Pwd"
-  export DC_ORCL_HOST=${DC_HOSTNAME}
+  # Nome do container da BD dentro da rede docker-compose (não o hostname
+  # da máquina host — os containers não o conseguem resolver por DNS).
+  export DC_ORCL_HOST=soadb
   export DC_ORCL_DBDATA=${DC_USERHOME}/dbdata
 
   # --- Password do AdminServer WebLogic (login na consola) ---
