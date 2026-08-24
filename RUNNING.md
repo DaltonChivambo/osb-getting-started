@@ -4,7 +4,7 @@ Este guia assume que já fizeste a configuração inicial (build da imagem `orac
 `docker-images` clonado, domínio já criado pelo menos uma vez — ver `README.md` para isso).
 Aqui é só o essencial para ligar/desligar o ambiente numa sessão normal de trabalho.
 
-## 0. Pré-requisito
+## 0. Pré-requisitos
 
 Docker Desktop tem de estar a correr. Se não estiver:
 
@@ -13,6 +13,14 @@ Docker Desktop tem de estar a correr. Se não estiver:
 ```
 
 Espera até `docker info` funcionar sem erro antes de continuares.
+
+**Importante — usa Git Bash, não PowerShell/CMD.** Todos os comandos abaixo (`source
+./setenv.sh` incluído) são bash/POSIX. Em PowerShell, `source` não existe e o script nem chega
+a correr — as variáveis `DC_*` ficam todas por definir, o `docker-compose` recebe valores em
+branco, e vais ver avisos tipo `The "DC_ORCL_HOST" variable is not set` seguidos de erros como
+`invalid spec: :/opt/oracle/oradata: empty section between colons`. Se vires esses avisos, é
+sinal de que estás na shell errada — abre o **Git Bash** (menu Iniciar → "Git Bash", ou a
+partir do PowerShell: `& "C:\Program Files\Git\bin\bash.exe"`) e repete os comandos lá.
 
 ## 1. Subir o ambiente
 
