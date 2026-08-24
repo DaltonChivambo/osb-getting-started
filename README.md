@@ -82,6 +82,33 @@ Em https://edelivery.oracle.com, procura "Oracle SOA Suite" e baixa para a vers�
    docker images | grep fmw-infrastructure   # confirma que ficou local
    ```
 
+#### 1.3. Imagem da base de dados (Oracle Database Enterprise Edition)
+
+O `soadb` (a base de dados onde vivem as schemas RCU — ver `docs/CONCEITOS.md`) usa uma imagem
+Oracle separada, que também precisa de aceitar licença e pull:
+
+1. No Container Registry (mesma conta/sessão do passo anterior), navega até
+   **Database → enterprise** e seleciona a tag **`12.2.0.1`**.
+2. Aceita a **License Agreement** dessa imagem.
+3. Faz o pull:
+
+   ```bash
+   docker pull container-registry.oracle.com/database/enterprise:12.2.0.1
+   ```
+
+4. O `docker-compose.yml` (com `DC_REGISTRY_DB="localhost"`, o valor por defeito do
+   `setenv.sh`) espera encontrar esta imagem com o nome `localhost/oracle/database:12.2.0.1-ee`,
+   não o nome completo do registry — dá-lhe esse nome extra (tag adicional, não apaga o
+   original):
+
+   ```bash
+   docker tag container-registry.oracle.com/database/enterprise:12.2.0.1 localhost/oracle/database:12.2.0.1-ee
+   ```
+
+   ```bash
+   docker images | grep "oracle/database"   # confirma as duas tags na mesma imagem
+   ```
+
 ### 2. Clonar o repositório oficial e construir a imagem
 
 ```bash
