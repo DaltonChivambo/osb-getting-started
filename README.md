@@ -10,6 +10,10 @@ Se quiseres perceber a arquitetura antes de meteres as mãos na massa — o que 
 OSB, o papel de cada um dos três containers, de onde vem a interface web, e o que o padrão
 Proxy → Pipeline → Business Service realmente resolve — ver **`docs/CONCEITOS.md`**.
 
+> **Já fizeste o setup inicial e só queres ligar/desligar o ambiente?** Este README é o guia
+> completo do zero — para o dia-a-dia (subir/parar rápido + troubleshooting) ver
+> **[`docs/RUNNING.md`](docs/RUNNING.md)**.
+
 ## Estrutura do repositório
 
 ```
