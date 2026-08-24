@@ -6,6 +6,10 @@ Docker e como funciona o ciclo básico **Proxy Service → Pipeline → Business
 Pensado para quem está a começar com OSB e quer um ponto de partida reproduzível, sem precisar
 de uma instalação on-prem completa.
 
+Se quiseres perceber a arquitetura antes de meteres as mãos na massa — o que é o WebLogic vs o
+OSB, o papel de cada um dos três containers, de onde vem a interface web, e o que o padrão
+Proxy → Pipeline → Business Service realmente resolve — ver **`CONCEITOS.md`**.
+
 ## Estrutura do repositório
 
 ```
@@ -13,6 +17,7 @@ de uma instalação on-prem completa.
 ├── README.md                              — este guia (setup do zero + primeira vez vs. vezes seguintes)
 ├── RUNNING.md                             — chuleta rápida do dia-a-dia + troubleshooting detalhado
 ├── TUTORIAL.md                            — passo a passo detalhado: criar a primeira Proxy Service na consola
+├── CONCEITOS.md                           — arquitetura: WebLogic vs OSB, os 3 containers, o padrão Proxy→Pipeline→Business Service
 ├── docker/
 │   ├── setenv.sh                          — variáveis de ambiente do domínio OSB
 │   └── docker-compose.yml                 — domínio OSB-only (base de dados + Admin + Managed Server)
@@ -222,6 +227,10 @@ Service Bus Console 12c (REST "untyped" não funciona para invocar backends, uma
 não pode invocar diretamente uma Business Service tipada com forma diferente, e a ação
 "Routing" só existe num nó Route dedicado, não num Stage normal) que o `TUTORIAL.md` explica e
 contorna.
+
+Para perceberes *porque* o exercício está montado assim (o que cada camada — Proxy, Pipeline,
+Business Service — resolve, e o que o teste realmente prova sobre o ambiente), ver
+**`CONCEITOS.md`**.
 
 No fim, testa com:
 
