@@ -36,6 +36,64 @@ O truque do `httpbin.org/get` é que ele **devolve em JSON o pedido que recebeu*
 corpo da resposta acima é um espelho: mostra-nos exatamente o que chegou ao backend depois de
 passar por toda a cadeia OSB. É isso que torna este teste tão informativo.
 
+### Confirmado depois de um arranque limpo
+
+O mesmo teste foi repetido a 25/08/2026 12:37 GMT, logo a seguir a um arranque completo do zero
+com o `./start-osb.sh` (os três containers parados e subidos de novo). Resultado idêntico,
+`HTTP/1.1 200 OK`:
+
+```console
+$ ./test-proxy.sh /echotest
+A chamar: http://localhost:9001/echotest
+---
+HTTP/1.1 200 OK
+Date: Tue, 25 Aug 2026 12:37:15 GMT
+Transfer-Encoding: chunked
+Content-Type: application/json; charset=iso-8859-1
+
+{
+  "args": {},
+  "headers": {
+    "Accept": "application/xml",
+    "Ecid-Context": "1.72453c47-7870-4be6-88ce-f34ce00ba05d-000008cb;kXjE0dJNVNKJ4MJN4PLHVMLH3KNJIVLGs5CEt9FCo5DEm0",
+    "Host": "httpbin.org",
+    "User-Agent": "Jersey/2.22.4 (HttpUrlConnection 1.8.0_451)",
+    "X-Amzn-Trace-Id": "Root=1-6a8d8c7d-72c20a0d6610e82271affd8f"
+  },
+  "origin": "197.235.69.145",
+  "url": "https://httpbin.org/get"
+}
+```
+
+Comparar as duas corridas é útil, porque mostra o que é **ruído** e o que é **prova**:
+
+| Campo | Muda entre corridas? | Porquê |
+|---|---|---|
+| `Date` | sim | hora do pedido |
+| `Ecid-Context` | sim | o OSB gera um ID de correlação novo por pedido |
+| `X-Amzn-Trace-Id` | sim | gerado pela infraestrutura do próprio httpbin |
+| `origin` | sim | é o IP público da tua ligação, não do OSB |
+| `Host: httpbin.org` | **não** | o OSB reescreve sempre o Host para o do backend |
+| `User-Agent: Jersey/2.22.4` | **não** | é sempre o cliente HTTP do OSB, nunca o teu curl |
+| `Accept: application/xml` | **não** | vem da configuração da Business Service |
+| `url` | **não** | é o endpoint configurado |
+
+Ou seja: as quatro linhas de baixo são a assinatura estrutural da mediação, e devem manter-se
+iguais em qualquer corrida. Se alguma delas mudar (sobretudo o `User-Agent` aparecer como
+`curl/...`), deixaste de estar a passar pelo OSB.
+
+Duas conclusões práticas desta repetição:
+
+- **A configuração sobrevive a `docker stop`/`up`.** A Proxy Service, o Pipeline e a Business
+  Service vivem no domínio, que está num bind mount (`$DC_USERHOME/osbdomain`) — parar e subir
+  os containers não perde nada. Só um `down -v` mais `rm -rf $DC_USERHOME` é que apaga (ver
+  `../README.md`, "Parar / limpar").
+- **O caminho de runtime (`:9001`) é independente da consola (`:7001`).** Na mesma sessão em que
+  este teste passou a 200, a consola tinha estado a dar `errorPage.jspx` por causa do identity
+  store ADF (ver `RUNNING.md`, "Problemas comuns"). Uma coisa não afeta a outra: os pedidos às
+  Proxy Services não passam pela camada ADF/OPSS da consola. Uma consola com problemas **não
+  significa** que as tuas Proxy Services estejam em baixo — e vice-versa.
+
 ## O caminho completo
 
 ```
