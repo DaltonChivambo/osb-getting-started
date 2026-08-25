@@ -193,6 +193,28 @@ docker logs -f osbms
   completo dos ficheiros de log do domínio e as formas de confirmar o arranque, ver
   `docs/RUNNING.md`, secção 2.
 
+- `as.log`/`ms.log` **não são apagados entre arranques** — se estás a repetir um `docker-compose
+  up -d osbms` depois de uma tentativa anterior, o `tail -f` mostra primeiro o fim do log
+  *antigo* (com timestamp de uma sessão passada) antes de chegarem linhas novas, o que pode
+  confundir-se com um erro atual.
+
+  A forma limpa de resolver isto é usar o **`./start-osb.sh`** (secção 4.2): ele roda o log
+  anterior para `.prev` antes de cada arranque, por isso o `tail -f` mostra só o arranque atual.
+
+  Se precisares mesmo de limpar à mão, **para o container primeiro** — truncar o ficheiro com o
+  servidor a correr não funciona:
+
+  ```bash
+  docker stop osbms
+  rm -f "$DC_DDIR_OSB/domains/infra_domain/logs/osb_server1/ms.log"
+  ```
+
+  (troca `osbms`/`ms.log`/`osb_server1` por `osbas`/`as.log` para o Admin Server.) O `> ficheiro`
+  com o container a correr **não liberta espaço**: o processo Java mantém o ficheiro aberto e
+  continua a escrever a partir do offset antigo, criando um buraco de zeros — o `grep` passa a
+  dizer `Binary file ... matches` e o ficheiro continua a crescer. Detalhe em
+  `docs/RUNNING.md`, "Problemas comuns".
+
 - `docker ps` pode mostrar os containers como `(unhealthy)` ou `(health: starting)` durante
   vários minutos depois de o log já dizer `The server started in RUNNING mode.` — o healthcheck
   demora um pouco a apanhar o estado novo. Não é sinal de erro por si só; confia na mensagem

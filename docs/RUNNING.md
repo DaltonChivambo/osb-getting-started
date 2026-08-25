@@ -147,6 +147,11 @@ Ordem de grandeza, com o domínio já criado: `soadb` fica pronta em ~2-3 min, o
 **~10 min** até `RUNNING` (o grosso é o deploy das aplicações do Service Bus — vais ver
 Coherence e ADF Faces a inicializar perto do fim), e o `osbms` outro tanto.
 
+Medido num arranque real (domínio já criado, via `./start-osb.sh`): `osbas` a `RUNNING` em
+**465s (~7,7 min)** e `osbms` em **315s (~5,3 min)** — cerca de 13 min no total. Se um arranque
+passar muito destes valores (chegou a observar-se 2h10min no `osbas`), algo está errado:
+verifica o tamanho do `as.log` e se há um loop de redirect a inundá-lo — ver "Problemas comuns".
+
 ## 3. Verificar que está tudo bem
 
 ```bash
@@ -238,6 +243,20 @@ de "Problemas comuns" abaixo).
   alcançável a partir de outros containers. Como isto vive no domínio (bind mount), só precisas
   de fazer isto **uma vez** — sobrevive a `docker-compose down`/`up` normais. Confirmado por
   login real (POST a `j_security_check`), não só por a página inicial carregar.
+
+  **Variante: o servidor está `RUNNING` mas o erro aparece na mesma.** O fix do `sed` acima
+  pode já estar aplicado (o `adapters.os_xml` a dizer `localhost`) e o `Malformed IPv6`
+  continuar a surgir em runtime, com o `osbas` a arrancar sem qualquer `JPS-02592` e a chegar a
+  `RUNNING` normalmente. Neste estado a consola carrega, mas as páginas ADF que precisam do
+  perfil do utilizador (a Ajuda, gestão de utilizadores) caem no `errorPage.jspx` — o stack
+  trace passa por `IgfIdentityManagementProvider.getIdsUserList`. É um modo de falha diferente
+  do `duplicate keys` mais abaixo: ali o servidor morre, aqui fica de pé com o identity store
+  degradado.
+
+  O que resolveu, verificado numa ocorrência real: um arranque limpo completo com o
+  `./start-osb.sh` (secção 1) — que aplica o `fix-adapters.sh` antes de cada servidor, roda os
+  logs e sobe tudo pela ordem certa. Depois disso, `Malformed IPv6` e `ADFSHARE-00120` ficaram
+  ambos a **zero** ocorrências. Não foi preciso mexer no `listen-address` do AdminServer.
 - **`osbas` ou `osbms` morre no arranque com `JPS-02592` / `duplicate keys`** — este é o
   problema mais chato deste setup, porque **volta a acontecer sozinho**. No `as.log`/`ms.log`:
 
@@ -296,3 +315,37 @@ de "Problemas comuns" abaixo).
 - **`osbms` sempre `(unhealthy)` mesmo com `RUNNING mode` no log**: o healthcheck da imagem
   verifica a porta errada se faltar `MANAGED_SERVER_CONTAINER=true` e `MANAGEDSERVER_PORT=9001`
   no ambiente do serviço.
+- **A consola entra em loop de redirect e o `as.log` cresce centenas de MB em minutos**:
+  o browser fica "a carregar" indefinidamente em
+  `/servicebus/faces/helppages/errorPage.jspx`, o CPU do `osbas` dispara, e o `as.log` passa de
+  alguns MB para centenas em menos de uma hora. Confirma no access log do AdminServer:
+
+  ```bash
+  MSYS_NO_PATHCONV=1 docker exec osbas tail -n 20 \
+    /u01/oracle/user_projects/domains/infra_domain/servers/AdminServer/logs/access.log
+  ```
+
+  Se vires o mesmo `errorPage.jspx` a alternar `200` e `302` várias vezes por segundo, sempre
+  com o **mesmo `Adf-Window-Id`**, é uma única janela de browser presa no loop `_afrLoop` do
+  ADF — a página de erro redireciona para si própria sem parar. Medido numa ocorrência real:
+  ~50 pedidos/segundo, 586 MB de `as.log` em ~50 minutos, com o `ADFSHARE-00120` a repetir-se
+  ~29 000 vezes.
+
+  **Quem para o loop é o cliente**: fecha a janela/separador do browser. Não há forma de o
+  travar do lado do servidor sem reiniciar o `osbas`. O gatilho observado foi o botão de
+  **Ajuda (`?`)** da Service Bus Console — o componente `OHWFilter` tenta criar uma sessão MDS
+  própria, falha, e cai no `errorPage.jspx` que entra em loop.
+
+  **Cuidado ao limpar o log:** `> as.log` com o servidor a correr **não** liberta espaço. O
+  processo Java mantém o ficheiro aberto e continua a escrever a partir do offset antigo,
+  criando um buraco de zeros — o `grep` passa a responder `Binary file ... matches` e o
+  ficheiro continua a crescer (observado: 312 MB → 457 MB → 586 MB, apesar dos truncamentos).
+  Para recuperar o espaço a sério, para o container primeiro:
+
+  ```bash
+  docker stop osbms osbas
+  rm -f "$DC_DDIR_OSB/domains/infra_domain/logs/as.log"
+  cd docker && ./start-osb.sh
+  ```
+
+  Em uso normal isto não se acumula: o `start-osb.sh` roda o log para `.prev` a cada arranque.
