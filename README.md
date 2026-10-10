@@ -147,6 +147,7 @@ Nos dias seguintes só precisas de `./start-osb.sh`.
 │   ├── COMPONENTES.md                     — mapa completo: imagens, containers, volumes, portas, ferramentas e como se relacionam
 │   ├── RUNNING.md                         — chuleta rápida do dia-a-dia + troubleshooting detalhado
 │   ├── TUTORIAL.md                        — passo a passo detalhado: criar a primeira Proxy Service na consola
+│   ├── JDEVELOPER.md                      — opcional: instalar o JDeveloper (SOA Quick Start), ligar ao OSB do Docker e publicar
 │   ├── FLUXO.md                           — o percurso de um pedido real, hop a hop, provado pela resposta do teste
 │   ├── CONCEITOS.md                       — arquitetura: WebLogic vs OSB, os 3 containers, o padrão Proxy→Pipeline→Business Service
 │   └── CONCEITOS-AVANCADOS.md             — sessões, tipagem REST, anatomia do Message Flow, clustering, segurança OPSS

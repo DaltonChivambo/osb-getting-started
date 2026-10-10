@@ -266,6 +266,7 @@ Tempos medidos com o domínio já criado: `osbas` ~8 min até `RUNNING`, `osbms`
 | Montar tudo do zero | `../README.md` |
 | Ligar/desligar e resolver problemas | `RUNNING.md` |
 | Criar a primeira Proxy Service | `TUTORIAL.md` |
+| Desenvolver e publicar a partir do JDeveloper | `JDEVELOPER.md` |
 | Perceber Proxy → Pipeline → Business Service | `CONCEITOS.md` |
 | Ver um pedido real hop a hop | `FLUXO.md` |
 | Sessões, tipagem REST, clustering, segurança | `CONCEITOS-AVANCADOS.md` |

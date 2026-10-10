@@ -184,7 +184,10 @@ No assistente: *Skip Auto Updates* → *Oracle Home* = `C:\Oracle\Middleware\Ora
 - Para confirmar o tooling OSB: *File → New → From Gallery* deve mostrar *Service Bus*. A
   instalação correta tem as pastas `osb\` e `soa\` dentro do Oracle Home.
 - Para ligar ao Docker: *Window → Application Servers*, WebLogic 12.x, `localhost:7001`, utilizador
-  `weblogic` (Admin Server do domínio com o OSB).
+  `weblogic`, e **WLS Domain = `infra_domain`** (o valor por defeito `base_domain` falha com
+  `Domain name mismatch`).
+
+Guia completo, da instalação à publicação de um projeto: **`JDEVELOPER.md`**.
 
 ## Erros comuns
 
