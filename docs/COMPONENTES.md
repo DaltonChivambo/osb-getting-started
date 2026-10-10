@@ -187,7 +187,7 @@ O percurso medido, linha a linha, está em `FLUXO.md`.
 | **Browser** | Consolas `:7001/console` e `:7001/servicebus` | **Sim** |
 | **`curl`** | Testar Proxy Services (usado pelo `test-proxy.sh`) | **Sim** (vem com o Git Bash) |
 | **Postman** | Alternativa gráfica ao `curl` (`test/osb-test.postman_collection.json`) | Opcional |
-| **JDK 8 de 64 bits + JDeveloper 12.2.1.4** | IDE para desenvolver; instalado a partir do zip `V983382-01` | **Opcional** — a consola web chega para os exercícios |
+| **JDK 8 de 64 bits + JDeveloper 12.2.1.4** | IDE para desenvolver; instalado a partir do SOA Quick Start (`V983385-01`, 2 zips), com o tooling OSB | **Opcional** — a consola web chega para os exercícios |
 
 > O Java do teu PC **não** é usado pelos containers: cada imagem traz o seu próprio JDK 8. O
 > JDK 8 local só serve para instalar o JDeveloper.

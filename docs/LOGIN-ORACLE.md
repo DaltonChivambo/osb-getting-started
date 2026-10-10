@@ -132,7 +132,8 @@ O que cada pacote contém (nomes `V9833xx-01.zip` que o eDelivery dá aos downlo
 | `V983383-01.zip` | `fmw_12.2.1.4.0_soa.jar` | Instalador do SOA Suite (obrigatório mesmo num domínio só-OSB) |
 | `V983387-01.zip` | `fmw_12.2.1.4.0_osb.jar` | Instalador do Oracle Service Bus |
 | `V983384-01.zip` | `fmw_12.2.1.4.0_b2bhealthcare.jar` | B2B/Healthcare — não usado nos exercícios, mas o `buildDockerImage.sh` espera-o |
-| `V983382-01.zip` | `jdev_suite_122140.jar` + `jdev_suite_1221402.jar` (+ `installing-oracle-jdeveloper.pdf`) | **JDeveloper Studio** 12.2.1.4.0 — opcional, só para desenvolver no IDE |
+| `V983385-01_1of2.zip` + `V983385-01_2of2.zip` | `fmw_12.2.1.4.0_soa_quickstart.jar` + `fmw_12.2.1.4.0_soa_quickstart2.jar` | **SOA Quick Start for Developers** 12.2.1.4.0 — JDeveloper com o tooling de SOA e OSB; opcional, só para desenvolver no IDE |
+| `V983382-01.zip` | `jdev_suite_122140.jar` + `jdev_suite_1221402.jar` | JDeveloper Studio simples — **não serve para OSB** (sem tooling de projetos Service Bus); usa o Quick Start acima |
 
 Descompacta cada zip para a sua pasta. Os 3 `.jar` `fmw_...` são os que vão para
 `docker-images/OracleSOASuite/dockerfiles/12.2.1.4/` (README, secção 2).
@@ -150,21 +151,40 @@ Descompacta cada zip para a sua pasta. Os 3 `.jar` `fmw_...` são os que vão pa
 ### Instalar o JDeveloper (opcional)
 
 Não é preciso para correr o OSB em Docker (a consola web chega para os exercícios). Só para quem
-quer o IDE.
+quer o IDE. O instalador é o **SOA Quick Start** (`V983385-01`), que traz o JDeveloper já com o
+tooling de SOA e OSB; o JDeveloper simples (`V983382-01`) não serve.
+
+Descompacta os dois zips e copia os dois `.jar` para a **mesma pasta**, sem espaços no caminho:
 
 ```powershell
-$java = "C:\Program Files\Java\jdk1.8.0_202\bin\java.exe"   # JDK 8 de 64 bits
-$jar  = "<pasta>\V983382-01\jdev_suite_122140.jar"
-& $java -jar $jar
+$src = "<pasta>\quickstart_zip"
+New-Item -ItemType Directory -Force C:\Oracle\qs_install | Out-Null
+Copy-Item "$src\V983385-01_1of2\fmw_12.2.1.4.0_soa_quickstart.jar"  C:\Oracle\qs_install\
+Copy-Item "$src\V983385-01_2of2\fmw_12.2.1.4.0_soa_quickstart2.jar" C:\Oracle\qs_install\
 ```
+
+Numa janela **PowerShell como Administrador**:
+
+```powershell
+& "C:\Program Files\Java\jdk1.8.0_202\bin\java.exe" -jar "C:\Oracle\qs_install\fmw_12.2.1.4.0_soa_quickstart.jar"
+```
+
+No assistente: *Skip Auto Updates* → *Oracle Home* = `C:\Oracle\Middleware\Oracle_Home` →
+*Install* → *Finish*. O JDeveloper fica em
+`C:\Oracle\Middleware\Oracle_Home\jdeveloper\jdev\bin\jdev64.exe`. No primeiro arranque escolhe
+*Default Role* e responde *No* à importação de preferências.
 
 - Tem de ser um **JDK 8 de 64 bits** (`java -version` deve dizer `64-Bit Server VM`; uma pasta
   em `Program Files (x86)` é 32 bits e o instalador não corre). O Java 17/21 não serve.
-- Corre numa janela **PowerShell como Administrador**, senão falha com `Unable to access or
-  modify the system registry`.
-- Os dois `.jar` têm de estar na **mesma pasta**.
-- Escolhe um Oracle Home sem espaços (ex.: `C:\Oracle\Middleware\jdev12214`) e **Studio Edition**.
-- O JDeveloper simples **não** traz o tooling de projetos OSB; esse vem do *SOA Quick Start*.
+- Corre como **Administrador**, senão falha com `Unable to access or modify the system registry`.
+- Os dois `.jar` têm de estar na **mesma pasta**; o segundo é lido a meio da instalação.
+- Se já havia um JDeveloper no mesmo Oracle Home, **desinstala-o primeiro**
+  (`<Oracle Home>\oui\bin\deinstall.cmd` como Administrador, depois apaga a pasta e
+  `%APPDATA%\JDeveloper`). Instalar por cima mistura produtos.
+- Para confirmar o tooling OSB: *File → New → From Gallery* deve mostrar *Service Bus*. A
+  instalação correta tem as pastas `osb\` e `soa\` dentro do Oracle Home.
+- Para ligar ao Docker: *Window → Application Servers*, WebLogic 12.x, `localhost:7001`, utilizador
+  `weblogic` (Admin Server do domínio com o OSB).
 
 ## Erros comuns
 
@@ -178,6 +198,7 @@ $jar  = "<pasta>\V983382-01\jdev_suite_122140.jar"
 | `buildDockerImage.sh` → `: FAILED open or readr` e `MD5 for required packages ... did not match` | Vários ficheiros do repositório `oracle/docker-images` estão **commitados com CRLF** (não depende da tua config do Git); o `md5sum` procura `fmw_...jar\r`. Não é problema dos jars. | Converter para LF dentro de `12.2.1.4/`, ver `README.md` secção 2. Atenção: `grep -rlI $'\r'` **não** os encontra no Git Bash (o grep do MSYS esconde o `\r`); usa `grep -lU`. |
 | JDeveloper: `Unable to access or modify the system registry` | Falta de permissões de administrador. | PowerShell como Administrador. |
 | JDeveloper: o instalador não arranca / JVM não suportada | JDK 32 bits ou versão errada. | JDK 8 de 64 bits (ver acima). |
+| JDeveloper: não aparece *Service Bus* em *New → From Gallery* | Foi instalado o JDeveloper simples (`V983382-01`) em vez do Quick Start. | Instala o `V983385-01` (ver acima). |
 
 ## Segurança e higiene do repo
 
