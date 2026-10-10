@@ -67,25 +67,42 @@ tick() {
   fi
 }
 
+# Espera $3 segundos, mas atualiza o cronometro todos os segundos (as verificacoes
+# ao log so acontecem de $3 em $3 s; sem isto a linha parecia parada). Fora de um
+# terminal imprime so uma linha por pausa, para nao encher o ficheiro.
+pause_with_timer() {
+  local label="$1" phase_start="$2" seconds="$3" i
+  for ((i = 0; i < seconds; i++)); do
+    if [ -t 1 ] || [ "$i" -eq 0 ]; then
+      tick "$label" "$phase_start"
+    fi
+    sleep 1
+  done
+}
+
 # Duracao de cada fase, para o resumo final.
-T_DB=""; T_AS=""; T_MS=""
+T_DB=""; T_AS=""; T_AS2=""; T_MS=""
 
 # A base de dados tem healthcheck a serio na imagem -- e mais fiavel que fazer grep
 # ao docker logs, que mantem as linhas do arranque anterior.
 wait_for_db() {
-  local waited=0 interval=10 timeout_s=900 status
+  local waited=0 interval=10 timeout_s=1500 status
   local phase_start=$SECONDS
-  echo "INFO: a aguardar que a soadb fique healthy..."
+  echo "INFO: a aguardar que a soadb fique pronta (1a vez, com BD nova: ~10 min; depois ~1-3 min)..."
   while [ "$waited" -lt "$timeout_s" ]; do
     status=$(docker inspect -f '{{.State.Health.Status}}' soadb 2>/dev/null || echo "unknown")
-    if [ "$status" = "healthy" ]; then
+    # So "healthy" nao chega: com uma BD nova o healthcheck passa a healthy ao fim de ~1 min,
+    # muito antes de o PDB estar criado e registado no listener (ORA-12514 / RCU a falhar).
+    # A imagem database/enterprise escreve "Done ! The database is ready for use ." quando
+    # termina (a frase "DATABASE IS READY TO USE!" e de outra imagem, nao aparece aqui).
+    if [ "$status" = "healthy" ] && docker logs soadb 2>&1 | grep -qi "database is ready for use"; then
       T_DB=$((SECONDS - phase_start))
       [ -t 1 ] && echo ""
       echo "OK: soadb healthy ($(fmt_time "$T_DB"))."
       return 0
     fi
-    tick "soadb" "$phase_start"
-    sleep "$interval"; waited=$((waited + interval))
+    pause_with_timer "soadb" "$phase_start" "$interval"
+    waited=$((waited + interval))
   done
   [ -t 1 ] && echo ""
   echo "ERRO: timeout a espera da soadb apos $(fmt_time "$timeout_s")." >&2
@@ -110,8 +127,18 @@ wait_for_server() {
       MSYS_NO_PATHCONV=1 docker exec "$container" tail -n 25 "$log" 2>&1 >&2
       return 1
     fi
-    tick "$label" "$phase_start"
-    sleep "$interval"; waited=$((waited + interval))
+    # O container pode ter terminado (ex.: o RCU falhou e o wrapper saiu com codigo 0).
+    # Sem isto o script ficava a espera ate ao timeout de um log que nunca vai mudar.
+    if [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null)" != "true" ]; then
+      local code
+      code=$(docker inspect -f '{{.State.ExitCode}}' "$container" 2>/dev/null || echo "?")
+      [ -t 1 ] && echo ""
+      echo "ERRO: o container $container parou (exit code $code) ao fim de $(fmt_time "$((SECONDS - phase_start))"). Ultimas linhas do docker logs:" >&2
+      docker logs --tail 25 "$container" 2>&1 >&2
+      return 1
+    fi
+    pause_with_timer "$label" "$phase_start" "$interval"
+    waited=$((waited + interval))
   done
   [ -t 1 ] && echo ""
   echo "ERRO: timeout a espera do $label apos $(fmt_time "$timeout_s")." >&2
@@ -130,6 +157,21 @@ echo "=== 2/3  Admin Server (osbas) ==="
 rotate_log "$AS_LOG_HOST"
 docker-compose up -d osbas || exit 1
 wait_for_server osbas "$AS_LOG" "Admin Server" 2700 T_AS || exit 1
+
+# Numa 1a subida o osbas acabou de criar o adapters.os_xml com %HOST% (identity store
+# partido: loop do errorPage.jspx na consola). O fix so tem efeito no proximo arranque,
+# por isso reinicia-se o osbas uma vez. Nas subidas seguintes isto nao acontece.
+FIXOUT=$(./fix-adapters.sh) || exit 1
+echo "$FIXOUT"
+if echo "$FIXOUT" | grep -q '^FIX-HOST'; then
+  echo ""
+  echo "INFO: 1a subida - o identity store usava %HOST%. A reiniciar o osbas com o fix aplicado..."
+  docker stop osbas > /dev/null || exit 1
+  ./fix-adapters.sh || exit 1          # o osbas acrescentou o bloco dele: reduz a 1
+  rotate_log "$AS_LOG_HOST"
+  docker-compose up -d osbas || exit 1
+  wait_for_server osbas "$AS_LOG" "Admin Server (reinicio)" 2700 T_AS2 || exit 1
+fi
 
 echo ""
 echo "=== 3/3  Managed Server (osbms) ==="
@@ -150,6 +192,7 @@ echo ""
 echo "Tempos (HH:MM:SS):"
 echo "  soadb  (base de dados) : $(fmt_time "$T_DB")"
 echo "  osbas  (Admin Server)  : $(fmt_time "$T_AS")"
+[ -n "$T_AS2" ] && echo "  osbas  (reinicio c/ fix): $(fmt_time "$T_AS2")"
 echo "  osbms  (Managed Server): $(fmt_time "$T_MS")"
 echo "  TOTAL                  : $(fmt_time "$SECONDS")"
 echo ""
