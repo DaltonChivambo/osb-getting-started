@@ -10,9 +10,19 @@ Se quiseres perceber a arquitetura antes de meteres as mãos na massa — o que 
 OSB, o papel de cada um dos três containers, de onde vem a interface web, e o que o padrão
 Proxy → Pipeline → Business Service realmente resolve — ver **`docs/CONCEITOS.md`**.
 
+Para o **mapa de tudo o que vai ser usado** — as 3 imagens (2 puxadas + 1 construída), os 3
+containers, volumes, portas, e todas as ferramentas e como se relacionam — ver
+**`docs/COMPONENTES.md`**.
+
 > **Já fizeste o setup inicial e só queres ligar/desligar o ambiente?** Este README é o guia
 > completo do zero — para o dia-a-dia (subir/parar rápido + troubleshooting) ver
 > **[`docs/RUNNING.md`](docs/RUNNING.md)**.
+
+> **A começar do zero? Faz primeiro os logins e aceita as licenças da Oracle.** Sem isso as
+> imagens Docker não descarregam e o `./start-osb.sh` falha logo no início com
+> `failed to resolve reference "localhost/oracle/database:12.2.0.1-ee"`. Conta Oracle, Auth
+> Token, `docker login`, licença por imagem, pull + tag e os downloads do eDelivery estão
+> todos em **[`docs/LOGIN-ORACLE.md`](docs/LOGIN-ORACLE.md)**.
 
 ## Estrutura do repositório
 
@@ -20,6 +30,8 @@ Proxy → Pipeline → Business Service realmente resolve — ver **`docs/CONCEI
 .
 ├── README.md                              — este guia (setup do zero + primeira vez vs. vezes seguintes)
 ├── docs/
+│   ├── LOGIN-ORACLE.md                    — contas, Auth Token, docker login, licenças e downloads da Oracle (fazer antes de tudo)
+│   ├── COMPONENTES.md                     — mapa completo: imagens, containers, volumes, portas, ferramentas e como se relacionam
 │   ├── RUNNING.md                         — chuleta rápida do dia-a-dia + troubleshooting detalhado
 │   ├── TUTORIAL.md                        — passo a passo detalhado: criar a primeira Proxy Service na consola
 │   ├── FLUXO.md                           — o percurso de um pedido real, hop a hop, provado pela resposta do teste
@@ -45,7 +57,9 @@ Baseado em: https://github.com/oracle/docker-images/tree/main/OracleSOASuite
 - Docker Desktop instalado e a correr (o backend WSL2 é o recomendado pela própria Docker
   Desktop, mas não é preciso correr os comandos dentro de uma distro WSL2 — ver nota abaixo).
 - ~16 GB RAM livres e ~40 GB de disco.
-- Uma conta Oracle (gratuita) para aceitar as licenças.
+- Uma conta Oracle (gratuita) para aceitar as licenças. O que fazer com ela — Auth Token,
+  `docker login`, licença de cada imagem, ordem dos passos — está em
+  **[`docs/LOGIN-ORACLE.md`](docs/LOGIN-ORACLE.md)**; faz isso antes da secção 1.
 
 > **⚠️ Todos os blocos de código deste guia (e dos ficheiros em `docs/`) são bash — precisam de
 > Git Bash ou WSL2, não funcionam em PowerShell nem CMD.** `source ./setenv.sh`, `$VAR`, os
@@ -59,9 +73,15 @@ Baseado em: https://github.com/oracle/docker-images/tree/main/OracleSOASuite
 
 ### 1. Download dos binários (manual, na Oracle)
 
+> Esta secção precisa de **dois logins diferentes**: o do browser em
+> https://edelivery.oracle.com (1.1) e o `docker login` com Auth Token em
+> https://container-registry.oracle.com (1.2 e 1.3). Passo a passo, ordem e erros típicos em
+> **[`docs/LOGIN-ORACLE.md`](docs/LOGIN-ORACLE.md)**.
+
 #### 1.1. Instaladores do SOA Suite / OSB
 
-Em https://edelivery.oracle.com, procura "Oracle SOA Suite" e baixa para a versão **12.2.1.4.0**:
+Em https://edelivery.oracle.com, procura "Oracle SOA Suite" e baixa para a versão **12.2.1.4.0**
+(cada `.jar` vem dentro de um `V9833xx-01.zip` — ver o mapa em `docs/LOGIN-ORACLE.md`, secção 4):
 
 - `fmw_12.2.1.4.0_soa.jar` — instalador do **Oracle SOA Suite** propriamente dito (BPEL Process
   Manager, Mediator, Human Workflow, Business Rules...). Mesmo num domínio "OSB-only" como o
@@ -131,19 +151,53 @@ Oracle separada, que também precisa de aceitar licença e pull:
    docker images | grep "oracle/database"   # confirma as duas tags na mesma imagem
    ```
 
+   > Se saltares este passo, o `./start-osb.sh` falha com `failed to resolve reference
+   > "localhost/oracle/database:12.2.0.1-ee" ... dial tcp [::1]:80: i/o timeout` — o Docker
+   > tenta descarregar a imagem de um registo chamado `localhost`. A solução é fazer o pull e o
+   > `docker tag` acima.
+
 ### 2. Clonar o repositório oficial e construir a imagem
 
 ```bash
-git clone https://github.com/oracle/docker-images.git
-cd docker-images/OracleSOASuite/dockerfiles
+# clone parcial: só a pasta OracleSOASuite (o repositório inteiro é enorme)
+git clone --depth 1 --filter=blob:none --sparse https://github.com/oracle/docker-images.git
+cd docker-images
+git sparse-checkout set OracleSOASuite
+cd OracleSOASuite/dockerfiles
 
 # coloca os 3 .jar baixados dentro de 12.2.1.4/
 cp /caminho/para/*.jar 12.2.1.4/
 
+# OBRIGATÓRIO: vários ficheiros deste repositório (install/soasuite.download, *.response,
+# oraInst.loc, Dockerfile, ...) estão commitados com finais de linha CRLF. Sem converter, o
+# buildDockerImage.sh falha com ": FAILED open or readr" / "MD5 ... did not match" (o md5sum
+# procura "fmw_...jar\r" — os jars estão bem). Converte para LF (os .jar ficam intactos):
+( cd 12.2.1.4 && find . -type f ! -name '*.jar' -exec grep -lU $'\r' {} + \
+    | while read -r f; do sed -i 's/\r$//' "$f"; done )
+# verificação: deve imprimir "OK" 3 vezes
+( cd 12.2.1.4 && md5sum -c install/soasuite.download 2>&1 | grep -v '^#' )
+
+# O Dockerfile faz "FROM oracle/fmw-infrastructure:12.2.1.4.0" (sem registry e com .0 no fim).
+# A imagem que puxaste tem outro nome, por isso dá-lhe este — confirma com:
+#   grep -n "^FROM" 12.2.1.4/Dockerfile
+docker tag container-registry.oracle.com/middleware/fmw-infrastructure:12.2.1.4 oracle/fmw-infrastructure:12.2.1.4.0
+
 sh buildDockerImage.sh -v 12.2.1.4
+
+# O build cria "oracle/soasuite:12.2.1.4", mas o docker-compose.yml pede
+# "localhost/oracle/soasuite:12.2.1.4" (DC_REGISTRY_SOA="localhost") — outra tag extra:
+docker tag oracle/soasuite:12.2.1.4 localhost/oracle/soasuite:12.2.1.4
 ```
 
-Isto cria a imagem `oracle/soasuite:12.2.1.4` — ainda sem domínio configurado.
+Isto cria a imagem `oracle/soasuite:12.2.1.4` — ainda sem domínio configurado. Sem os dois
+`docker tag`, o build falha a resolver a base, e o `./start-osb.sh` falha com
+`failed to resolve reference "localhost/oracle/soasuite:12.2.1.4" ... i/o timeout`.
+
+> **Ficheiros de um setup anterior:** se já existe `$HOME/osb-docker/osbdomain` de uma
+> tentativa antiga e o volume `osb_soadb_orcl` é novo (ou foi apagado), o `osbas` vê os
+> marcadores `RCU.OSB01.suc` / `SOA.DOMAINCFG.suc`, salta o RCU e falha com `ORA-01017` porque
+> as schemas já não existem. Antes da primeira subida, mete a pasta antiga de lado:
+> `mv ~/osb-docker/osbdomain ~/osb-docker/osbdomain.old`.
 
 ### 3. Copiar os ficheiros deste repositório
 

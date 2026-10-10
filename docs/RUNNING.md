@@ -4,6 +4,11 @@ Este guia assume que já fizeste a configuração inicial (build da imagem `orac
 `docker-images` clonado, domínio já criado pelo menos uma vez — ver `../README.md` para isso).
 Aqui é só o essencial para ligar/desligar o ambiente numa sessão normal de trabalho.
 
+> **Primeira vez, sem as imagens Oracle?** Antes de qualquer `./start-osb.sh` tens de ter feito
+> o login no Container Registry (Auth Token), aceite as licenças e feito o pull + tag das
+> imagens — ver [`LOGIN-ORACLE.md`](LOGIN-ORACLE.md). Sem isso o arranque falha logo no
+> primeiro passo (ver "Problemas comuns" no fim deste documento).
+
 ## 0. Pré-requisitos
 
 Docker Desktop tem de estar a correr. Se não estiver:
@@ -51,6 +56,10 @@ O script sobe `soadb` → `osbas` → `osbms` pela ordem certa, espera que cada 
 antes de avançar, e **aplica o fix obrigatório do `adapters.os_xml` nos dois momentos em que é
 preciso** (antes do `osbas` e outra vez antes do `osbms`). Se algum servidor falhar, mostra as
 últimas linhas do log e sai, em vez de ficar à espera indefinidamente. No fim imprime os URLs.
+
+Enquanto espera, mostra um cronómetro numa única linha — `[hora] osbas a correr: HH:MM:SS |
+total: HH:MM:SS` — e no fim um resumo com o tempo de cada fase (`soadb`, `osbas`, `osbms`) e o
+total.
 
 ⚠️ **Não subas os containers só com `docker-compose up` sem o fix.** Cada servidor acrescenta
 um bloco `<ldap>` ao `adapters.os_xml` ao arrancar; quem apanhar o ficheiro com 2 morre
@@ -209,6 +218,15 @@ de "Problemas comuns" abaixo).
 
 ## Problemas comuns
 
+- **`./start-osb.sh` falha no passo 1/3 com `failed to resolve reference
+  "localhost/oracle/database:12.2.0.1-ee" ... dial tcp [::1]:80: i/o timeout`**: a imagem da
+  base de dados não existe localmente. Como o nome começa por `localhost/`, o Docker tenta
+  descarregá-la de um registo no teu próprio PC e dá timeout (~60 s). Não é problema de rede.
+  Confirma com `docker images | grep oracle` — se não aparecer `localhost/oracle/database` com a
+  tag `12.2.0.1-ee`, falta fazer o `docker login` com Auth Token, aceitar a licença da imagem e
+  correr `docker pull` + `docker tag`. Passo a passo em
+  [`LOGIN-ORACLE.md`](LOGIN-ORACLE.md), secção 3. O mesmo vale para `oracle/soasuite:12.2.1.4`
+  (tem de ser construída com o `buildDockerImage.sh`, `../README.md` secção 2).
 - **`osbas` falha a arrancar com `ORA-01017: invalid username/password` no `as.log`**, mesmo
   tendo a certeza de que a password em `setenv.sh` está certa: isto não é um problema de
   password — é a schema RCU (`OSB01_OPSS`, etc.) que deixou de existir na base de dados. A
