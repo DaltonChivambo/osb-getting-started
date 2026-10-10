@@ -44,6 +44,17 @@ Duas formas de resolver:
 
 ## 1. Subir o ambiente
 
+Antes do primeiro arranque (ou depois de reinstalar o Docker/limpar imagens), confirma que as
+duas imagens que o compose usa existem — o `./start-osb.sh` só liga, não descarrega nem constrói:
+
+```bash
+docker images | grep -E "localhost/oracle/(database|soasuite)"
+```
+
+Têm de aparecer `localhost/oracle/database  12.2.0.1-ee` e `localhost/oracle/soasuite
+12.2.1.4`. Se faltar alguma, ver [`LOGIN-ORACLE.md`](LOGIN-ORACLE.md) e `../README.md`
+(secções 1.3 e 2).
+
 Corre a partir da pasta `docker/` deste repositório (os container names — `soadb`, `osbas`,
 `osbms` — já resolvem-se por DNS interno do Docker Compose, não precisas de mexer em hosts):
 
@@ -73,7 +84,7 @@ Depois de um arranque completo o ficheiro fica sempre com 2, por isso isto aplic
 cd docker
 source ./setenv.sh
 
-# 1) Base de dados — espera por "DATABASE IS READY TO USE!"
+# 1) Base de dados — espera por "Done ! The database is ready for use ."
 docker-compose up -d soadb
 docker logs -f soadb
 
@@ -184,9 +195,14 @@ este `docker-compose.yml` só cria container para `osb_server1`.)
 
 | O quê | URL | Credenciais |
 |---|---|---|
-| WebLogic Admin Console | http://localhost:7001/console | `weblogic` / o que definiste em `DC_ADMIN_PWD` (setenv.sh) |
+| WebLogic Admin Console | http://localhost:7001/console | `weblogic` / o que definiste em `DC_ADMIN_PWD` (setenv.sh; por defeito `MudaEsta1Pwd`) |
 | Service Bus Console | http://localhost:7001/servicebus | idem |
 | Proxy Services (runtime) | http://localhost:9001/... (HTTP) e :9002 (HTTPS) | — |
+| Base de dados (`SYS`, SQL*Net :1521) | `soadb` | `sys` / `DC_ORCL_SYSPWD` (por defeito `MudaEsta_1Pwd`, **com** `_`) |
+
+⚠️ **São duas passwords diferentes.** Na consola usa a `DC_ADMIN_PWD` (sem `_`); a `DC_ORCL_SYSPWD`
+é só da base de dados e na consola dá `Autenticação Negada`. Testado: `/console` e
+`/servicebus` aceitam `MudaEsta1Pwd` e recusam `MudaEsta_1Pwd`.
 
 ## 5. Testar uma Proxy Service
 
@@ -227,6 +243,64 @@ de "Problemas comuns" abaixo).
   correr `docker pull` + `docker tag`. Passo a passo em
   [`LOGIN-ORACLE.md`](LOGIN-ORACLE.md), secção 3. O mesmo vale para `oracle/soasuite:12.2.1.4`
   (tem de ser construída com o `buildDockerImage.sh`, `../README.md` secção 2).
+- **`osbas` sai (`Exited (0)`) ao fim de ~20 s com `RCU-6090 ... Unable to connect to the DB ...
+  Invalid username/password`** (e o `start-osb.sh` antigo esperava 45 min sem perceber): o RCU
+  liga-se à BD como `SYS` com `DC_ORCL_SYSPWD`, e a password do `SYS` na BD é **outra**. Duas
+  causas, ambas na imagem `database/enterprise`:
+  1. **Ignora `ORACLE_PWD`** (essa variável é da imagem construída por Dockerfile). A password
+     vem de `DB_PASSWD` e, se faltar, fica `Oradoc_db1`. O `docker-compose.yml` já define
+     `DB_PASSWD=${DC_ORCL_SYSPWD}`.
+  2. **Exige 1 caractere especial.** Com `MudaEsta1Pwd` o log da `soadb` mostra
+     `OPW-00029: Password complexity failed for SYS user : Password must contain at least 1
+     special character`, e a password não é aplicada. Usa por exemplo `MudaEsta_1Pwd`.
+
+  Diagnóstico — testa o login diretamente na BD:
+
+  ```bash
+  docker logs soadb 2>&1 | grep -E "OPW-|password"
+  docker exec -i soadb bash -s <<'EOF'
+  export ORACLE_HOME=/u01/app/oracle/product/12.2.0/dbhome_1 PATH=/u01/app/oracle/product/12.2.0/dbhome_1/bin:$PATH
+  sqlplus -s /nolog <<'SQL'
+  connect sys/<DC_ORCL_SYSPWD>@//localhost:1521/orclpdb1.localdomain as sysdba
+  select 'LOGIN_OK' from dual;
+  SQL
+  EOF
+  ```
+
+  Correção: a password só é aplicada quando a BD é criada, por isso, com uma BD onde o RCU
+  **nunca** correu (sem dados teus), recria-a:
+
+  ```bash
+  docker rm -f osbas soadb
+  docker volume rm osb_soadb_orcl
+  cd docker && ./start-osb.sh        # a criação da BD demora uns minutos a mais
+  ```
+
+  Se o RCU já tinha corrido e tens schemas `OSB01_*` que queres manter, **não** apagues o
+  volume: altera a password do `SYS`/`SYSTEM` dentro da BD (`alter user ... identified by`).
+- **Primeira subida com um domínio antigo no disco: `SOA RCU has already been loaded.
+  Skipping...` + `ORA-01017` + `Server state changed to FAILED`**: o `wrapper` lê os
+  marcadores `RCU.OSB01.suc` e `SOA.DOMAINCFG.suc` em
+  `$DC_USERHOME/osbdomain/container/infra_domain/` e salta o RCU e a criação do domínio — mas a
+  base de dados é nova (volume `osb_soadb_orcl` acabado de criar, ou apagado) e não tem as
+  schemas `OSB01_*`. O container fica `Up` e o Java já morreu. Confirma com:
+
+  ```bash
+  docker logs --tail 15 osbas | grep -E "Skipping|RCU"                 # "Skipping..." = apanhou os marcadores
+  MSYS_NO_PATHCONV=1 docker exec osbas grep -m2 "ORA-" \
+    /u01/oracle/user_projects/domains/infra_domain/logs/as.log         # ORA-01017
+  ```
+
+  Correção (renomeia, não apaga):
+
+  ```bash
+  docker stop osbas
+  mv ~/osb-docker/osbdomain ~/osb-docker/osbdomain.old
+  cd docker && ./start-osb.sh        # agora corre o RCU e cria o domínio: 20-40 min
+  ```
+
+  Regra: **domínio e volume da BD têm de ser criados ou apagados juntos.** Ver também o item
+  seguinte.
 - **`osbas` falha a arrancar com `ORA-01017: invalid username/password` no `as.log`**, mesmo
   tendo a certeza de que a password em `setenv.sh` está certa: isto não é um problema de
   password — é a schema RCU (`OSB01_OPSS`, etc.) que deixou de existir na base de dados. A
@@ -239,7 +313,11 @@ de "Problemas comuns" abaixo).
   nomeado para evitar isto; se acontecer mesmo assim, confirma que a tua cópia está actualizada
   (`git pull`).
 - **`/servicebus` redireciona para `errorPage.jspx`** (normalmente ao tentar fazer login, não
-  necessariamente ao carregar a página inicial): confirma no `as.log` (ver secção 2) se há
+  necessariamente ao carregar a página inicial). **O `./start-osb.sh` já aplica o fix abaixo
+  sozinho** (via `fix-adapters.sh`, com um reinício do `osbas` na 1.ª subida) — só precisas de
+  fazê-lo à mão se subiste os containers com `docker-compose up`. Se tens o separador aberto
+  em loop, **fecha-o primeiro**: o loop é do cliente e enche o `as.log` (58 MB em minutos).
+  Confirma no `as.log` (ver secção 2) se há
   `java.net.URISyntaxException: Malformed IPv6 address at index 8: ldap://[172.20.0.x]:7001`.
   É um bug de incompatibilidade entre o JDK 8 mais recente incluído na imagem e código antigo
   do FMW (`libOVD`/`ArisID`) que envolve endereços IPv4 em `[]` como se fossem IPv6 ao construir

@@ -48,7 +48,18 @@ O ambiente tem **duas fases** bem separadas. Confundi-las é a causa mais comum 
 |---|---|---|---|---|
 | 1 | `localhost/oracle/database:12.2.0.1-ee` | `pull` de `database/enterprise:12.2.0.1` + `docker tag` | Oracle Database 12.2 Enterprise Edition pronto a usar | **Sim** → `soadb` |
 | 2 | `fmw-infrastructure:12.2.1.4` | `pull` de `middleware/fmw-infrastructure:12.2.1.4` | Oracle Linux + **JDK 8** + **WebLogic Server** + bibliotecas comuns do Fusion Middleware (JRF) | **Não** — é só matéria-prima do build |
-| 3 | `oracle/soasuite:12.2.1.4` | **construída por ti** com `buildDockerImage.sh` | A imagem 2 + SOA Suite + OSB + B2B/Healthcare instalados | **Sim** → `osbas` e `osbms` |
+| 3 | `localhost/oracle/soasuite:12.2.1.4` | **construída por ti** com `buildDockerImage.sh` (que a cria como `oracle/soasuite:12.2.1.4`) + `docker tag` | A imagem 2 + SOA Suite + OSB + B2B/Healthcare instalados | **Sim** → `osbas` e `osbms` |
+
+> **Nomes e tags extra.** Cada imagem acaba com **mais do que um nome** apontando para o mesmo
+> conteúdo (não duplica espaço). São estas as tags que tens de criar à mão:
+>
+> | Tag nova | Aponta para | Porquê |
+> |---|---|---|
+> | `localhost/oracle/database:12.2.0.1-ee` | `database/enterprise:12.2.0.1` | o `docker-compose.yml` pede este nome |
+> | `oracle/fmw-infrastructure:12.2.1.4.0` | `fmw-infrastructure:12.2.1.4` | o `Dockerfile` do build faz `FROM` com este nome (e `.0` no fim) |
+> | `localhost/oracle/soasuite:12.2.1.4` | `oracle/soasuite:12.2.1.4` | o `docker-compose.yml` pede este nome |
+>
+> Faltando qualquer uma, o Docker tenta puxar do registry `localhost` e dá `i/o timeout`.
 
 ### Porque a imagem 1 leva um `docker tag`
 
@@ -123,6 +134,10 @@ Duas armadilhas decorrentes disto:
 
 ## 6. Portas — resumo
 
+Têm de estar **livres** no teu PC: se outro projeto já usar 1521, 5500, 7001, 9001 ou 9002, o
+container respetivo não arranca. Confirma com `docker ps` (e `netstat -ano | findstr :7001` no
+Windows) se tiveres outros ambientes Docker a correr.
+
 | Porta | Serviço | Para quê | Exemplo |
 |---|---|---|---|
 | `1521` | `soadb` | Ligação SQL à base de dados | cliente SQL |
@@ -136,7 +151,7 @@ Duas armadilhas decorrentes disto:
 ### Arranque (`./start-osb.sh`)
 
 ```
-1. soadb   sobe, espera pelo healthcheck ("DATABASE IS READY TO USE!")
+1. soadb   sobe, espera pelo healthcheck ("Done ! The database is ready for use .")
 2. fix-adapters.sh                      ← reduz o adapters.os_xml a 1 bloco <ldap>
 3. osbas   sobe → RCU/domínio (só na 1.ª vez) → AdminServer a RUNNING
 4. fix-adapters.sh                      ← o osbas acrescentou o bloco dele

@@ -24,6 +24,119 @@ containers, volumes, portas, e todas as ferramentas e como se relacionam — ver
 > Token, `docker login`, licença por imagem, pull + tag e os downloads do eDelivery estão
 > todos em **[`docs/LOGIN-ORACLE.md`](docs/LOGIN-ORACLE.md)**.
 
+## Caminho rápido: do zero ao OSB a correr
+
+Todos os comandos pela ordem em que têm de ser corridos, já com as armadilhas apanhadas em
+execução real. O detalhe e o porquê de cada passo estão nas secções 1 a 4 mais abaixo.
+
+**Antes de começar:** Docker Desktop a correr, **Git Bash** (não PowerShell — os scripts são
+bash), ~16 GB de RAM livres e ~40 GB de disco. Para trabalhar com os comandos `docker` simples
+(`pull`, `tag`, `images`) qualquer shell serve, mas **numa linha só**: o `\` de continuação
+é só de bash.
+
+| # | O quê | Onde |
+|---|---|---|
+| 0 | Conta Oracle, **Auth Token**, aceitar as licenças das 2 imagens | browser — `docs/LOGIN-ORACLE.md` |
+| 1 | Descarregar os 3 jars (SOA, OSB, B2B) em edelivery.oracle.com | browser — secção 1.1 |
+| 2 | `docker login` + 2 pulls + 1 tag | terminal — secções 1.2 e 1.3 |
+| 3 | Construir a imagem `oracle/soasuite` (2 tags + conversão CRLF + build) | terminal — secção 2 |
+| 4 | Pôr de lado um domínio antigo, se existir | terminal — secção 2 |
+| 5 | `./start-osb.sh` (1.ª vez: 20-40 min) | terminal — secção 4 |
+
+```bash
+# --- 2. login e imagens da Oracle (Auth Token como password, NÃO a password da conta) ---
+docker login container-registry.oracle.com
+docker pull container-registry.oracle.com/database/enterprise:12.2.0.1
+docker pull container-registry.oracle.com/middleware/fmw-infrastructure:12.2.1.4
+docker tag container-registry.oracle.com/database/enterprise:12.2.0.1 localhost/oracle/database:12.2.0.1-ee
+
+# --- 3. construir a oracle/soasuite (os 3 .jar já descompactados dos V9833xx-01.zip) ---
+git clone --depth 1 --filter=blob:none --sparse https://github.com/oracle/docker-images.git
+cd docker-images && git sparse-checkout set OracleSOASuite && cd OracleSOASuite/dockerfiles
+cp /caminho/para/fmw_12.2.1.4.0_{soa,osb,b2bhealthcare}.jar 12.2.1.4/
+( cd 12.2.1.4 && find . -type f ! -name '*.jar' -exec grep -lU $'\r' {} + \
+    | while read -r f; do sed -i 's/\r$//' "$f"; done )     # CRLF -> LF (os .jar ficam intactos)
+( cd 12.2.1.4 && md5sum -c install/soasuite.download 2>&1 | grep -v '^#' )   # 3x OK
+docker tag container-registry.oracle.com/middleware/fmw-infrastructure:12.2.1.4 oracle/fmw-infrastructure:12.2.1.4.0
+sh buildDockerImage.sh -v 12.2.1.4        # pede uma tecla; ~6 min
+docker tag oracle/soasuite:12.2.1.4 localhost/oracle/soasuite:12.2.1.4
+
+# --- 4. se existe um domínio de uma tentativa anterior e a BD é nova: mete-o de lado ---
+mv ~/osb-docker/osbdomain ~/osb-docker/osbdomain.old
+
+# --- 5. subir (a partir da pasta docker/ deste repositório) ---
+cd /caminho/para/osb/docker
+./start-osb.sh                            # cronómetro HH:MM:SS; 20-40 min na 1.ª vez
+```
+
+**Confirma antes do passo 5:** `docker images | grep -E "localhost/oracle/(database|soasuite)"`
+deve mostrar as **duas** imagens. Se faltar uma, o `./start-osb.sh` falha com
+`failed to resolve reference "localhost/oracle/...": ... i/o timeout`.
+
+### O que o passo 5 faz na primeira vez (e quanto demora)
+
+O `./start-osb.sh` faz tudo em sequência, com um cronómetro `HH:MM:SS` e um resumo no fim:
+
+| # | Fase | O que acontece | Tempo observado |
+|---|---|---|---|
+| 1 | `soadb` | Cria a BD Oracle de raiz (PDB incluído). Só passa quando o log diz `The database is ready for use` — o `healthy` do Docker chega ao fim de ~1 min, **muito antes** de a BD estar utilizável | **~10 min** (1.ª vez); ~1-3 min depois |
+| 2 | `osbas` | Corre o **RCU** (schemas `OSB01_*`), cria o domínio, arranca o Admin Server (implanta as apps do OSB) | **> 12 min** para chegar ao deploy dos adaptadores; no total, vários minutos mais |
+| 2b | `osbas` (reinício) | **Só na 1.ª vez:** aplica o fix do identity store (`%HOST%` → `localhost`) e reinicia o `osbas` uma vez | ~7 min (403 s medidos) |
+| 3 | `osbms` | Arranca o Managed Server das Proxy Services | ~5 min |
+
+Orçamento realista para a primeira subida: **40 a 60 min**. Cada servidor tem um limite de
+45 min e a BD de 25 min; se um container sair a meio, o script **para logo e mostra o motivo**
+(não fica à espera do timeout).
+
+Nas subidas seguintes, sem os passos 1-2b longos, são **~10-13 min** no total.
+
+### Passwords — qual é qual
+
+São **duas passwords diferentes**. Confundi-las é a causa do "Autenticação Negada".
+
+| Para quê | Utilizador | Password por defeito | Variável (`docker/setenv.sh`) |
+|---|---|---|---|
+| **Consolas web**: `/console` e `/servicebus` | `weblogic` | `MudaEsta1Pwd` | `DC_ADMIN_PWD` |
+| **Base de dados** (`SYS`/`SYSTEM`, usada pelo RCU) | `sys` | `MudaEsta_1Pwd` | `DC_ORCL_SYSPWD` |
+| Schemas RCU (`OSB01_*`) | — | `MudaEsta1Pwd` | `DC_RCU_SCHPWD` |
+
+A da BD **tem de ter um caractere especial** (a imagem da Oracle recusa-a sem ele); a da
+consola não precisa. Só consegues entrar na consola com a segunda coluna certa: `weblogic` /
+`MudaEsta1Pwd` (**sem** `_`).
+
+### Depois de arrancar: confirmar que está tudo bem
+
+```bash
+# 1) as duas consolas respondem (302 = pronto; 000 = ainda a arrancar)
+curl -s -o /dev/null -w "console:    %{http_code}\n" http://localhost:7001/console
+curl -s -o /dev/null -w "servicebus: %{http_code}\n" http://localhost:7001/servicebus
+
+# 2) o identity store está bom: deve dar 0
+MSYS_NO_PATHCONV=1 docker exec osbas grep -c "Malformed IPv6" \
+  /u01/oracle/user_projects/domains/infra_domain/logs/as.log
+
+# 3) os 3 containers
+docker ps --filter name=soadb --filter name=osbas --filter name=osbms
+```
+
+Depois abre uma **janela anónima** em http://localhost:7001/servicebus (`weblogic` /
+`MudaEsta1Pwd`) e segue `docs/TUTORIAL.md`. **Não uses o botão de Ajuda (`?`)** da consola: foi o
+gatilho do loop do `errorPage.jspx`. Se a página ficar "a carregar" em `errorPage.jspx`, **fecha o
+separador** (o loop é do browser e enche o `as.log`) — ver `docs/RUNNING.md`, "Problemas comuns".
+Nos dias seguintes só precisas de `./start-osb.sh`.
+
+### Erros mais comuns do arranque, num relance
+
+| Sintoma | Causa | Onde |
+|---|---|---|
+| `failed to resolve reference "localhost/oracle/...": i/o timeout` | Falta uma imagem ou a tag `localhost/...` | passo 2/3; `docs/LOGIN-ORACLE.md` |
+| `: FAILED open or readr` / `MD5 ... did not match` | Ficheiros do repo da Oracle com CRLF | passo 3 |
+| `osbas` sai ao fim de ~20 s com `RCU-6090 ... Invalid username/password` | Password da BD sem caractere especial, ou imagem ignora `ORACLE_PWD` | `docs/RUNNING.md` |
+| `SOA RCU has already been loaded. Skipping...` + `ORA-01017` | Domínio antigo com BD nova | passo 4 |
+| `errorPage.jspx` em loop | Identity store com `%HOST%` | automático no `start-osb.sh`; `docs/RUNNING.md` |
+| `Autenticação Negada` | Usaste a password da BD na consola | tabela acima |
+| `ERR_EMPTY_RESPONSE` em `:7001` | O `osbas` ainda está a arrancar | espera pelo `302` |
+
 ## Estrutura do repositório
 
 ```
@@ -199,23 +312,56 @@ Isto cria a imagem `oracle/soasuite:12.2.1.4` — ainda sem domínio configurado
 > as schemas já não existem. Antes da primeira subida, mete a pasta antiga de lado:
 > `mv ~/osb-docker/osbdomain ~/osb-docker/osbdomain.old`.
 
-### 3. Copiar os ficheiros deste repositório
+### 3. Configurar o `setenv.sh` (não é preciso copiar nada)
 
-Copia `docker/setenv.sh` e `docker/docker-compose.yml` (desta pasta `osb`) para dentro da tua
-checkout do `docker-images`, por exemplo para `docker-images/OracleSOASuite/osb-domain/`.
+Os ficheiros `docker/setenv.sh`, `docker/docker-compose.yml`, `docker/start-osb.sh` e
+`docker/fix-adapters.sh` **correm a partir da pasta `docker/` deste repositório**. Não os copies
+para dentro do clone do `docker-images`: esse clone só serve para construir a imagem (secção 2).
 
-Edita `setenv.sh`:
-- Confirma `DC_REGISTRY_SOA="localhost"` (assume que a imagem ficou local após o build).
+Edita `docker/setenv.sh`:
+- Confirma `DC_REGISTRY_SOA="localhost"` e `DC_REGISTRY_DB="localhost"` — é por isso que as
+  imagens têm de existir com o prefixo `localhost/` (as duas tags extra das secções 1.3 e 2).
 - **Muda as passwords** (`DC_ORCL_SYSPWD`, `DC_ADMIN_PWD`, `DC_RCU_SCHPWD`) — regra Oracle:
   mín. 8 caracteres, pelo menos 1 maiúscula e 1 número.
+- **`DC_ORCL_SYSPWD` tem de ter também 1 caractere especial** (o valor por defeito,
+  `MudaEsta_1Pwd`, já tem o `_`). A imagem `database/enterprise` recusa uma password sem ele
+  (`OPW-00029: Password must contain at least 1 special character`) e deixa a BD com outra
+  password; o RCU do `osbas` falha depois, ao fim de ~20 s, com `RCU-6090 ... Invalid
+  username/password`. Evita `$ ! # & \ " '`. Só tem efeito quando a BD é **criada** (volume
+  `osb_soadb_orcl` novo): se mudares a password depois, recria o volume — ver
+  `docs/RUNNING.md`, "Problemas comuns".
+- `DC_USERHOME` (por defeito `${HOME}/osb-docker`) é onde ficam o domínio e a pasta da BD. No
+  Git Bash resolve para `C:\Users\<tu>\osb-docker`.
+
+Antes de arrancar, confirma que as imagens que o compose usa existem e que não há domínio
+antigo a atrapalhar:
+
+```bash
+docker images | grep -E "localhost/oracle/(database|soasuite)"   # as duas, com as tags certas
+ls ~/osb-docker/osbdomain 2>/dev/null && echo "ATENCAO: ja existe um dominio - ver nota da secção 2"
+```
 
 ### 4. Subir o ambiente — primeira vez
 
+**Forma recomendada:** o `./start-osb.sh` também serve na primeira vez. O `fix-adapters.sh` que
+ele chama trata de um domínio ainda inexistente ("dominio por criar - nada a fazer"), sobe os
+três containers pela ordem certa, espera por cada um (com cronómetro) e dá 45 min de limite a
+cada servidor, o que cobre os 20-40 min do RCU + criação do domínio:
+
 ```bash
-cd docker-images/OracleSOASuite/osb-domain
+cd docker
+./start-osb.sh
+```
+
+Para acompanhar o progresso real noutra janela Git Bash, usa o `as.log` (ver as notas abaixo).
+
+**À mão**, se quiseres controlar cada passo:
+
+```bash
+cd docker
 source setenv.sh
 
-# 1) Base de dados — espera até aparecer "DATABASE IS READY TO USE!" no log
+# 1) Base de dados — espera até aparecer "Done ! The database is ready for use ." no log
 docker-compose up -d soadb
 docker logs -f soadb
 
@@ -283,6 +429,14 @@ docker logs -f osbms
 
 ### 4.1 Fix obrigatório, uma vez só: identity store embutido
 
+> **Automático com o `./start-osb.sh`.** O `fix-adapters.sh` aplica este mesmo `sed`
+> (`%HOST%` → `localhost`) e, numa primeira subida, o `start-osb.sh` reinicia o `osbas` uma vez
+> para o fix ter efeito (o ficheiro só é lido no arranque). Verificado numa primeira subida
+> real: antes do fix, 2443 `Malformed IPv6` e o loop do `errorPage.jspx` (o `as.log` chegou a
+> 58 MB em minutos); depois do fix, **0** ocorrências e login a funcionar
+> (`j_security_check` → 303 → `OSBWelcomeServlet` → 200). O comando manual abaixo só é preciso
+> se subires os containers à mão com `docker-compose up`.
+
 Depois do domínio criado pela primeira vez, o login na Service Bus Console (e em qualquer
 página ADF autenticada) falha com um redirect para `errorPage.jspx`. A causa é um bug de
 incompatibilidade entre o JDK 8 incluído na imagem e código antigo do FMW: o identity store
@@ -344,7 +498,7 @@ cd docker
 source ./setenv.sh
 
 docker-compose up -d soadb
-docker logs -f soadb          # espera por "DATABASE IS READY TO USE!"
+docker logs -f soadb          # espera por "Done ! The database is ready for use ."
 
 ./fix-adapters.sh             # reduz o adapters.os_xml a 1 bloco <ldap>
 docker-compose up -d osbas
@@ -374,6 +528,10 @@ completo deste e de outros problemas comuns.
 
 - **WebLogic Admin Console**: http://localhost:7001/console (user: `weblogic`, password: a que definiste em `DC_ADMIN_PWD`)
 - **Service Bus Console**: http://localhost:7001/servicebus
+
+> A password das consolas é **`DC_ADMIN_PWD`**, não a `DC_ORCL_SYSPWD` (essa é a da base de
+> dados, com `_`). Ver a tabela "Passwords — qual é qual" no "Caminho rápido", no topo. Usa uma
+> janela anónima para o browser não preencher a password errada.
 
 ### 6. Fazer o pequeno teste
 

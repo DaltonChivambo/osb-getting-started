@@ -28,7 +28,11 @@ recusa se não aceitaste a licença **dessa imagem** no site.
 - [ ] **D.** Aceitar a licença de **Database → enterprise** (tag `12.2.0.1`) e de **Middleware → fmw-infrastructure** (tag `12.2.1.4`) (secção 3.3)
 - [ ] **E.** `docker pull` das duas imagens + `docker tag` da imagem da BD (secção 3.4)
 - [ ] **F.** Descarregar os instaladores em https://edelivery.oracle.com (secção 4)
-- [ ] **G.** Só depois: construir a imagem `oracle/soasuite:12.2.1.4` e usar o `./start-osb.sh` — ver `../README.md`, secções 2 a 4
+- [ ] **G.** Construir a imagem `oracle/soasuite:12.2.1.4` — `../README.md`, secção 2. Inclui: clone parcial do `oracle/docker-images`, copiar os 3 jars, **converter CRLF → LF**, `docker tag` da base para `oracle/fmw-infrastructure:12.2.1.4.0`, `buildDockerImage.sh` e `docker tag` final para `localhost/oracle/soasuite:12.2.1.4`
+- [ ] **H.** Se existir um domínio antigo em `~/osb-docker/osbdomain` e a BD é nova: `mv ~/osb-docker/osbdomain ~/osb-docker/osbdomain.old`
+- [ ] **I.** `./start-osb.sh` na pasta `docker/` (1.ª vez: 20-40 min, com cronómetro)
+
+O resumo de todos os comandos, por ordem, está no `../README.md`, "Caminho rápido".
 
 O `./start-osb.sh` e o `docs/RUNNING.md` **assumem que de A a G já está feito**. Eles só ligam e
 desligam o ambiente; não descarregam nem constroem nada.
