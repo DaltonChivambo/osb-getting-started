@@ -8,6 +8,9 @@
 # setup inicial). Na primeira vez de todas, o osbas corre o RCU e demora 20-40 min --
 # este script espera na mesma, mas convem acompanhar o log em paralelo.
 #
+# Mostra um cronometro (HH:MM:SS) com o tempo da fase atual e o total do script, e
+# no fim um resumo com a duracao de cada fase.
+#
 # Uso:
 #   ./start-osb.sh
 #
@@ -41,45 +44,77 @@ rotate_log() {
   fi
 }
 
+# SECONDS e o contador do proprio bash (segundos desde o inicio do script).
+SECONDS=0
+
+# Formata um numero de segundos como HH:MM:SS.
+fmt_time() {
+  local s="$1"
+  printf '%02d:%02d:%02d' $((s / 3600)) $(((s % 3600) / 60)) $((s % 60))
+}
+
+# Cronometro: tempo da fase atual + total do script. Num terminal reescreve sempre a
+# mesma linha; fora de um terminal (saida redirecionada) imprime uma linha por tick.
+tick() {
+  local label="$1" phase_start="$2"
+  local phase=$((SECONDS - phase_start))
+  if [ -t 1 ]; then
+    printf '\r  [%s] %s a correr: %s  |  total: %s   ' \
+      "$(date +%H:%M:%S)" "$label" "$(fmt_time "$phase")" "$(fmt_time "$SECONDS")"
+  else
+    printf '  [%s] %s a correr: %s | total: %s\n' \
+      "$(date +%H:%M:%S)" "$label" "$(fmt_time "$phase")" "$(fmt_time "$SECONDS")"
+  fi
+}
+
+# Duracao de cada fase, para o resumo final.
+T_DB=""; T_AS=""; T_MS=""
+
 # A base de dados tem healthcheck a serio na imagem -- e mais fiavel que fazer grep
 # ao docker logs, que mantem as linhas do arranque anterior.
 wait_for_db() {
   local waited=0 interval=10 timeout_s=900 status
+  local phase_start=$SECONDS
   echo "INFO: a aguardar que a soadb fique healthy..."
   while [ "$waited" -lt "$timeout_s" ]; do
     status=$(docker inspect -f '{{.State.Health.Status}}' soadb 2>/dev/null || echo "unknown")
     if [ "$status" = "healthy" ]; then
-      echo ""
-      echo "OK: soadb healthy (${waited}s)."
+      T_DB=$((SECONDS - phase_start))
+      [ -t 1 ] && echo ""
+      echo "OK: soadb healthy ($(fmt_time "$T_DB"))."
       return 0
     fi
-    sleep "$interval"; waited=$((waited + interval)); printf '.'
+    tick "soadb" "$phase_start"
+    sleep "$interval"; waited=$((waited + interval))
   done
-  echo ""
-  echo "ERRO: timeout a espera da soadb apos ${timeout_s}s." >&2
+  [ -t 1 ] && echo ""
+  echo "ERRO: timeout a espera da soadb apos $(fmt_time "$timeout_s")." >&2
   return 1
 }
 
 wait_for_server() {
-  local container="$1" log="$2" label="$3" timeout_s="$4"
+  local container="$1" log="$2" label="$3" timeout_s="$4" result_var="$5"
   local waited=0 interval=15
-  echo "INFO: a aguardar que o $label chegue a RUNNING (tipicamente ~10 min)..."
+  local phase_start=$SECONDS
+  echo "INFO: a aguardar que o $label chegue a RUNNING (tipicamente ~10 min; 20-40 min na 1a vez)..."
   while [ "$waited" -lt "$timeout_s" ]; do
     if MSYS_NO_PATHCONV=1 docker exec "$container" grep -q "RUNNING mode" "$log" 2>/dev/null; then
-      echo ""
-      echo "OK: $label em RUNNING mode (${waited}s)."
+      printf -v "$result_var" '%s' "$((SECONDS - phase_start))"
+      [ -t 1 ] && echo ""
+      echo "OK: $label em RUNNING mode ($(fmt_time "$((SECONDS - phase_start))"))."
       return 0
     fi
     if MSYS_NO_PATHCONV=1 docker exec "$container" grep -q "state changed to FAILED" "$log" 2>/dev/null; then
-      echo ""
-      echo "ERRO: o $label falhou a arrancar. Ultimas linhas do log:" >&2
+      [ -t 1 ] && echo ""
+      echo "ERRO: o $label falhou a arrancar ao fim de $(fmt_time "$((SECONDS - phase_start))"). Ultimas linhas do log:" >&2
       MSYS_NO_PATHCONV=1 docker exec "$container" tail -n 25 "$log" 2>&1 >&2
       return 1
     fi
-    sleep "$interval"; waited=$((waited + interval)); printf '.'
+    tick "$label" "$phase_start"
+    sleep "$interval"; waited=$((waited + interval))
   done
-  echo ""
-  echo "ERRO: timeout a espera do $label apos ${timeout_s}s." >&2
+  [ -t 1 ] && echo ""
+  echo "ERRO: timeout a espera do $label apos $(fmt_time "$timeout_s")." >&2
   echo "      O container pode estar Up com o processo Java ja morto - ve o log:" >&2
   echo "      MSYS_NO_PATHCONV=1 docker exec $container tail -n 40 $log" >&2
   return 1
@@ -94,7 +129,7 @@ echo "=== 2/3  Admin Server (osbas) ==="
 ./fix-adapters.sh || exit 1
 rotate_log "$AS_LOG_HOST"
 docker-compose up -d osbas || exit 1
-wait_for_server osbas "$AS_LOG" "Admin Server" 2700 || exit 1
+wait_for_server osbas "$AS_LOG" "Admin Server" 2700 T_AS || exit 1
 
 echo ""
 echo "=== 3/3  Managed Server (osbms) ==="
@@ -103,7 +138,7 @@ echo "=== 3/3  Managed Server (osbms) ==="
 ./fix-adapters.sh || exit 1
 rotate_log "$MS_LOG_HOST"
 docker-compose up -d osbms || exit 1
-wait_for_server osbms "$MS_LOG" "Managed Server" 2700 || exit 1
+wait_for_server osbms "$MS_LOG" "Managed Server" 2700 T_MS || exit 1
 
 echo ""
 echo "=== Ambiente pronto ==="
@@ -111,6 +146,12 @@ echo "  WebLogic Admin Console : http://localhost:7001/console"
 echo "  Service Bus Console    : http://localhost:7001/servicebus"
 echo "  Proxy Services         : http://localhost:9001 (HTTP) / :9002 (HTTPS)"
 echo "  Utilizador             : weblogic / \$DC_ADMIN_PWD (ver setenv.sh)"
+echo ""
+echo "Tempos (HH:MM:SS):"
+echo "  soadb  (base de dados) : $(fmt_time "$T_DB")"
+echo "  osbas  (Admin Server)  : $(fmt_time "$T_AS")"
+echo "  osbms  (Managed Server): $(fmt_time "$T_MS")"
+echo "  TOTAL                  : $(fmt_time "$SECONDS")"
 echo ""
 echo "Nota: 'docker ps' pode mostrar (health: starting) mais uns minutos - o"
 echo "healthcheck demora a apanhar o estado novo. Os servidores estao a correr."
