@@ -17,6 +17,12 @@ services:
       - ORACLE_SID=${DC_ORCL_SID}
       - ORACLE_PDB=${DC_ORCL_PDB}
       - ORACLE_PWD=${DC_ORCL_SYSPWD}
+      # A imagem database/enterprise do Container Registry NAO le o ORACLE_PWD (isso e da
+      # imagem construida com o buildContainerImage.sh). A password do SYS/SYSTEM/PDBADMIN
+      # vem de DB_PASSWD e, se faltar, e "Oradoc_db1" -- e o RCU do osbas falha logo com
+      # "RCU-6090 ... Invalid username/password" porque tenta ligar com DC_ORCL_SYSPWD.
+      # So tem efeito quando a BD e criada (volume osb_soadb_orcl novo).
+      - DB_PASSWD=${DC_ORCL_SYSPWD}
     volumes:
       - ${DC_ORCL_DBDATA}:/opt/oracle/oradata
       # A imagem database/enterprise guarda os datafiles reais em /ORCL, um volume

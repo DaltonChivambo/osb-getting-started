@@ -34,15 +34,22 @@ exportComposeEnv() {
   # ORACLE_SID/ORACLE_PDB e cria sempre com estes nomes fixos.
   export DC_ORCL_SID=ORCLCDB
   export DC_ORCL_PDB=orclpdb1.localdomain
-  # DEFINE UMA PASSWORD (min. 8 chars, 1 maiúscula, 1 número)
-  export DC_ORCL_SYSPWD="MudaEsta1Pwd"
+  # DEFINE UMA PASSWORD (min. 8 chars, 1 maiúscula, 1 número E 1 caracter especial).
+  # O caracter especial é obrigatório: a imagem database/enterprise recusa a password
+  # com "OPW-00029: Password complexity failed for SYS user : Password must contain at
+  # least 1 special character" e a BD fica com uma password que não é a tua -- o RCU do
+  # osbas falha depois com "RCU-6090 ... Invalid username/password". Evita $ ! # & \ "
+  # e ' (o shell/URLs interpretam-nos); "_" é seguro.
+  export DC_ORCL_SYSPWD="MudaEsta_1Pwd"
   # Nome do container da BD dentro da rede docker-compose (não o hostname
   # da máquina host — os containers não o conseguem resolver por DNS).
   export DC_ORCL_HOST=soadb
   export DC_ORCL_DBDATA=${DC_USERHOME}/dbdata
 
-  # --- Password do AdminServer WebLogic (login na consola) ---
+  # --- Password do AdminServer WebLogic (login nas consolas /console e /servicebus) ---
   # user: weblogic
+  # NAO e a DC_ORCL_SYSPWD acima: aquela e so da base de dados (e tem de ter caractere
+  # especial). Usar a da BD na consola da "Autenticacao Negada".
   export DC_ADMIN_PWD="MudaEsta1Pwd"
 
   # --- Password comum RCU + prefixo das schemas do OSB ---
