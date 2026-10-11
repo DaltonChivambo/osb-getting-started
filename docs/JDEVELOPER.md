@@ -127,7 +127,8 @@ Executa `C:\Oracle\Middleware\Oracle_Home\jdeveloper\jdev\bin\jdev64.exe`. Na pr
 - **Select Role** → *Default Role* (ou *Studio Developer*).
 - Se perguntar para importar preferências de outra versão → **No**.
 
-Como confirmar a categoria de Service Bus: *File → New → From Gallery* deve mostrar **Service Bus**.
+Como confirmar a categoria de Service Bus: *File → New → From Gallery* deve mostrar **Service Bus**
+(com *Service Bus Application* e *Service Bus Project*).
 Se não aparecer, o IDE não carregou as extensões do passo 4 (ver Resolução de problemas).
 
 ### 5.2 Criar a ligação ao Admin Server
@@ -180,9 +181,15 @@ Se falhar:
 > **Estado:** estes menus seguem a estrutura do tooling do OSB 12c, mas **não foram validados no
 > IDE desta máquina**. Se um nome de menu diferir, os conceitos e a ordem mantêm-se.
 
-1. **File → New → From Gallery → Service Bus → Service Bus Application**. Nome sugerido:
-   `OsbTutorial`; o IDE cria a aplicação e um projeto Service Bus dentro dela.
-2. Cria os componentes **na mesma ordem e com a mesma forma** de `docs/TUTORIAL.md`:
+A ordem é sempre **Application → Project → serviços**. Uma aplicação do JDeveloper é só o
+contentor; os serviços vivem dentro de um projeto Service Bus.
+
+1. **Application:** *File → New → From Gallery → Service Bus → Service Bus Application*. Nome
+   sugerido: `OsbTutorial`. Termina o wizard; a aplicação fica **sem projeto**.
+2. **Project:** com a aplicação selecionada, *File → New → From Gallery → Service Bus →
+   Service Bus Project*. Nome sugerido: `TESTE_OSB` (o mesmo do `docs/TUTORIAL.md`).
+3. **Serviços**, dentro do projeto (botão direito no projeto → *New → From Gallery → Service Bus*),
+   **na mesma ordem e com a mesma forma** de `docs/TUTORIAL.md`:
 
    | Ordem | Componente | Nome | Configuração |
    |---|---|---|---|
@@ -225,6 +232,41 @@ cd test
 Uma resposta HTTP 200 com JSON do `httpbin.org` confirma o ciclo completo:
 **cliente → `EchoTestPS` → `EchoTestPS_Pipeline` → Route → `HttpBinBS` → httpbin.org**.
 Detalhe de cada salto em `docs/FLUXO.md`.
+
+## 9. Levar um projeto para outro computador
+
+Há dois caminhos, conforme a origem do projeto. Em ambos, o JDeveloper do outro computador tem de
+ser a **mesma versão (12.2.1.4)**, instalado com o **SOA Quick Start** (passo 3), senão não há
+*Service Bus* no IDE.
+
+### 9.1 O projeto nasceu no JDeveloper (recomendado)
+
+Leva a **pasta da aplicação** (a que contém o `.jws`, o `.jpr` e as pastas dos projetos), de
+preferência através de **Git** (`git clone` no outro computador). Depois, **File → Open** e
+escolhe o `.jws`.
+
+Isto preserva tudo: estrutura, dependências entre projetos e configuração.
+
+### 9.2 O projeto só existe no servidor
+
+1. **Exportar:** na Service Bus Console (`http://localhost:7001/servicebus`) → **Project
+   Explorer** → seleciona o projeto → **Export**. O browser descarrega um `sbconfig.jar`.
+2. Copia o `sbconfig.jar` para o outro computador.
+3. **Importar no IDE:** **File → Import → Service Bus Resources** → **Configuration Jar** →
+   escolhe o `sbconfig.jar` e a aplicação/projeto de destino.
+
+Como confirmar: o projeto aparece no *Applications* com Proxy, Pipeline e Business Service, e o
+separador *Problems* está vazio.
+
+### 9.3 Cuidados
+
+- **Dependências:** se o projeto usa outro projeto OSB (por exemplo um `Common` com WSDLs/XSDs),
+  exporta-o no **mesmo** JAR, senão a importação fica com referências por resolver.
+- **Valores de ambiente** (URLs dos endpoints, JNDI, JCA) podem não servir no destino. Ajusta-os
+  depois de importar.
+- **Passwords:** as *service accounts* não saem em claro no JAR. Têm de ser recriadas no destino.
+- **Uma fonte de verdade:** depois de importar, passa a versionar o projeto no Git e a publicar a
+  partir do IDE (ver regras abaixo).
 
 ## Regras para não te complicares
 
