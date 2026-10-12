@@ -145,7 +145,87 @@ Troca o `httpbin.org` por um sistema teu, e a arquitetura (proxy/pipeline/routin
 exatamente a mesma. Este exercício é a base sobre a qual constróis qualquer integração real a
 seguir.
 
+## 5. Application Servers e o JDeveloper: quem desenha, quem executa
+
+### O que é um Application Server
+
+Um **Application Server** é um programa que **corre aplicações**: hospeda-as, executa-as e
+expõe-nas na rede. Não é o IDE nem a base de dados: é o ambiente onde o teu projeto vive
+**depois** de pronto.
+
+```
+Tu escreves o projeto  ──►  publicas (deploy)  ──►  o servidor executa e responde a pedidos
+   (JDeveloper)                                       (WebLogic = Application Server)
+```
+
+O JDeveloper só **desenha e empacota**. Quem **executa** é o application server.
+
+### Neste ambiente
+
+- O application server é o **Oracle WebLogic Server** (ver secção 1). O OSB é uma aplicação que
+  corre dentro dele.
+- No Docker, são os contentores `osbas` (Admin Server, `:7001`) e `osbms` (managed server
+  `osb_server1`, `:9001`).
+- O **Admin Server** administra o domínio e recebe os *deploys*; o **managed server** é onde as
+  Proxy Services respondem a pedidos.
+
+### Design-time vs. runtime
+
+O JDeveloper (Quick Start) e o contentor Docker trazem, cada um, o seu OSB 12.2.1.4, mas com
+papéis diferentes:
+
+| | **Design-time** | **Runtime** |
+|---|---|---|
+| Onde | JDeveloper, `C:\Oracle\Middleware\Oracle_Home\osb` | Contentores `osbas` / `osbms` |
+| Para quê | Desenhar e validar Proxy, Pipeline e Business Service | Executar e responder a pedidos |
+| Resultado | Ficheiros de projeto | Serviços ativos em `:9001` |
+| Exige servidor | Não | É o servidor |
+
+Os dois têm de ser da **mesma versão** (12.2.1.4) para a publicação ser compatível.
+
+### De onde vem o OSB do Docker
+
+Não é uma imagem descarregada já pronta: foi **construída localmente**.
+
+| Container | Imagem | Origem |
+|---|---|---|
+| `osbas`, `osbms` | `localhost/oracle/soasuite:12.2.1.4` | `buildDockerImage.sh` do repositório `oracle/docker-images` (`OracleSOASuite`), com a base `middleware/fmw-infrastructure:12.2.1.4` do Oracle Container Registry e os jars `fmw_12.2.1.4.0_soa.jar`, `..._osb.jar` e `..._b2bhealthcare.jar` do eDelivery |
+| `soadb` | `localhost/oracle/database:12.2.0.1-ee` | `database/enterprise:12.2.0.1` do Oracle Container Registry, com tag `localhost/...` |
+
+O domínio `infra_domain` **não vem na imagem**: é criado no primeiro arranque do `osbas`
+(secção 1). Passos e logins em `../README.md` e `LOGIN-ORACLE.md`.
+
+### A janela "Application Servers" do JDeveloper
+
+*Window → Application Servers* é só a lista das **ligações** a servidores onde se pode publicar.
+Uma ligação (por exemplo `osb-docker`) **não instala nada**: guarda host, porta, utilizador,
+password e o nome do domínio.
+
+| Tipo de servidor | Exemplo |
+|---|---|
+| **Externo** | `osb-docker`, que aponta para `localhost:7001` (porta mapeada do contentor `osbas`) |
+| **Integrado** | *IntegratedWebLogicServer*, que o próprio JDeveloper arranca (Derby embutida) |
+
+```
+JDeveloper (Windows)  ──  ligação "osb-docker"  ──►  localhost:7001  ──►  contentor osbas
+   desenha o projeto       (host + porta + login)     (porta mapeada)      (OSB 12.2.1.4)
+```
+
+A ligação fica guardada no perfil do utilizador (`%APPDATA%\JDeveloper\system...\`), não no
+Oracle Home: apagar essa pasta apaga a ligação. Como criá-la e testá-la, passo a passo, está em
+`JDEVELOPER.md`.
+
+### Analogia
+
+- JDeveloper = o **editor**.
+- Application server = o **servidor onde o serviço realmente funciona**.
+- Ligação = o **endereço** que diz ao editor para onde enviar o trabalho.
+
+Sem servidor a correr, o projeto são só ficheiros: não há nada a responder a pedidos.
+
 ## A seguir
+
+Para a instalação do IDE e como publicar a partir dele, ver **`JDEVELOPER.md`**.
 
 Para mecanismos mais profundos — o modelo de sessões da consola, porque a tipagem REST importa
 tecnicamente, a anatomia completa de um Message Flow (Stage vs Route Node), clustering, e
