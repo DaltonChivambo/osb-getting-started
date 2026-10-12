@@ -38,7 +38,12 @@ MS_LOG="/u01/oracle/user_projects/domains/infra_domain/logs/osb_server1/ms.log"
 # O log da arranque anterior fica em .prev, para post-mortem. Sem isto, uma linha
 # "RUNNING mode" ou "FAILED" antiga faz a espera dar um falso positivo imediato.
 rotate_log() {
-  local f="$1"
+  local f="$1" c="${2:-}"
+  # Se o container ja esta a correr, o processo continua a escrever no ficheiro aberto: um mv
+  # deixava-o a escrever em .prev e o as.log nunca mais aparecia (a espera ficava presa).
+  if [ -n "$c" ] && [ "$(docker inspect -f "{{.State.Running}}" "$c" 2>/dev/null)" = "true" ]; then
+    return 0
+  fi
   if [ -f "$f" ] && [ -s "$f" ]; then
     mv -f "$f" "$f.prev" 2>/dev/null || true
   fi
@@ -155,8 +160,19 @@ wait_for_db || exit 1
 
 echo ""
 echo "=== 2/3  Admin Server (osbas) ==="
+
+# Parar sempre o osbms e o osbas antes de arrancar: o adapters.os_xml so e lido no arranque do
+# servidor, e o fix-adapters.sh tem de correr ANTES de o osbas arrancar. Se o osbas ja estava a
+# correr (ex.: arrancado a mao), ficava com o identity store %HOST% em memoria e a consola
+# entrava em loop no errorPage.jspx, mesmo com o ficheiro ja corrigido.
+for c in osbms osbas; do
+  if [ "$(docker inspect -f "{{.State.Running}}" "$c" 2>/dev/null)" = "true" ]; then
+    echo "INFO: a parar o $c antes de arrancar (para o fix ser lido no arranque)..."
+    docker stop "$c" > /dev/null || exit 1
+  fi
+done
 ./fix-adapters.sh || exit 1
-rotate_log "$AS_LOG_HOST"
+rotate_log "$AS_LOG_HOST" osbas
 docker-compose up -d osbas || exit 1
 wait_for_server osbas "$AS_LOG" "Admin Server" 2700 T_AS || exit 1
 
@@ -170,7 +186,7 @@ if grep -q '^FIX-HOST' <<< "$FIXOUT"; then
   echo "INFO: 1a subida - o identity store usava %HOST%. A reiniciar o osbas com o fix aplicado..."
   docker stop osbas > /dev/null || exit 1
   ./fix-adapters.sh || exit 1          # o osbas acrescentou o bloco dele: reduz a 1
-  rotate_log "$AS_LOG_HOST"
+  rotate_log "$AS_LOG_HOST" osbas
   docker-compose up -d osbas || exit 1
   wait_for_server osbas "$AS_LOG" "Admin Server (reinicio)" 2700 T_AS2 || exit 1
 fi
@@ -180,7 +196,7 @@ echo "=== 3/3  Managed Server (osbms) ==="
 # Obrigatorio: o osbas acabou de acrescentar o bloco dele ao adapters.os_xml.
 # Sem este segundo fix, o osbms apanha o ficheiro com 2 blocos e morre.
 ./fix-adapters.sh || exit 1
-rotate_log "$MS_LOG_HOST"
+rotate_log "$MS_LOG_HOST" osbms
 docker-compose up -d osbms || exit 1
 wait_for_server osbms "$MS_LOG" "Managed Server" 2700 T_MS || exit 1
 
