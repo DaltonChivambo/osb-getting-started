@@ -295,13 +295,20 @@ Como confirmar: o *Deployment Log* termina com sucesso, e na Service Bus Console
 As Proxy Services respondem no managed server, **porta 9001** (não 7001). Em **Git Bash**:
 
 ```bash
-cd test
-./test-proxy.sh /echotest
+curl -i http://localhost:9001/echotest
+# ou: cd test && ./test-proxy.sh /echotest
 ```
 
-Uma resposta HTTP 200 com JSON do `httpbin.org` confirma o ciclo completo:
-**cliente → `EchoTestPS` → `EchoTestPS_Pipeline` → Route → `HttpBinBS` → httpbin.org**.
+Uma resposta HTTP 200 com JSON do backend confirma o ciclo completo:
+**cliente → `EchoTestPS` → `EchoTestPSPipeline` → Route → `HttpBinBS` → backend**.
 Detalhe de cada salto em `docs/FLUXO.md`.
+
+> O `httpbin.org` é um serviço público e falha por vezes (HTTP 503 do balanceador da AWS).
+> Nesse caso o OSB responde `500 OSB-380000` **sem mensagem**. Confirma com
+> `curl -s -o /dev/null -w "%{http_code}
+" https://httpbin.org/get`: se der 503, o problema é o
+> backend, não o teu projeto. Para continuares, troca o endpoint do `HttpBinBS` para
+> `https://postman-echo.com` (também responde a `GET /get`).
 
 ## 9. Levar um projeto para outro computador
 
