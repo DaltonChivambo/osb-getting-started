@@ -95,7 +95,9 @@ wait_for_db() {
     # muito antes de o PDB estar criado e registado no listener (ORA-12514 / RCU a falhar).
     # A imagem database/enterprise escreve "Done ! The database is ready for use ." quando
     # termina (a frase "DATABASE IS READY TO USE!" e de outra imagem, nao aparece aqui).
-    if [ "$status" = "healthy" ] && docker logs soadb 2>&1 | grep -qi "database is ready for use"; then
+    # Nao usar "docker logs | grep -q": com pipefail, o grep -q sai ao primeiro match,
+    # o docker logs apanha SIGPIPE e o pipeline falha mesmo com a frase presente.
+    if [ "$status" = "healthy" ] && [ "$(docker logs soadb 2>&1 | grep -ci "database is ready for use")" -gt 0 ]; then
       T_DB=$((SECONDS - phase_start))
       [ -t 1 ] && echo ""
       echo "OK: soadb healthy ($(fmt_time "$T_DB"))."
@@ -163,7 +165,7 @@ wait_for_server osbas "$AS_LOG" "Admin Server" 2700 T_AS || exit 1
 # por isso reinicia-se o osbas uma vez. Nas subidas seguintes isto nao acontece.
 FIXOUT=$(./fix-adapters.sh) || exit 1
 echo "$FIXOUT"
-if echo "$FIXOUT" | grep -q '^FIX-HOST'; then
+if grep -q '^FIX-HOST' <<< "$FIXOUT"; then
   echo ""
   echo "INFO: 1a subida - o identity store usava %HOST%. A reiniciar o osbas com o fix aplicado..."
   docker stop osbas > /dev/null || exit 1
