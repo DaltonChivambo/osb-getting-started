@@ -305,8 +305,7 @@ Detalhe de cada salto em `docs/FLUXO.md`.
 
 > O `httpbin.org` é um serviço público e falha por vezes (HTTP 503 do balanceador da AWS).
 > Nesse caso o OSB responde `500 OSB-380000` **sem mensagem**. Confirma com
-> `curl -s -o /dev/null -w "%{http_code}
-" https://httpbin.org/get`: se der 503, o problema é o
+> `curl -s -o /dev/null -w "%{http_code}\n" https://httpbin.org/get`: se der 503, o problema é o
 > backend, não o teu projeto. Para continuares, troca o endpoint do `HttpBinBS` para
 > `https://postman-echo.com` (também responde a `GET /get`).
 
