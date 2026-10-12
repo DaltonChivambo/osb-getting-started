@@ -157,7 +157,7 @@ Nos dias seguintes só precisas de `./start-osb.sh`.
 │   ├── start-osb.sh                       — sobe o stack todo pela ordem certa, com o fix aplicado e espera por cada servidor
 │   └── fix-adapters.sh                    — corrige o adapters.os_xml (bug do "duplicate keys"); chamado pelo start-osb.sh
 └── test/
-    ├── httpbin.wadl                       — WADL de exemplo (recurso GET) usado no docs/TUTORIAL.md
+    ├── httpbin.wadl                       — WADL (formato do OSB, GET /get) para o fluxo do JDeveloper; ver docs/JDEVELOPER.md, secção 6
     ├── test-proxy.sh                      — script curl para testar uma Proxy Service
     └── osb-test.postman_collection.json   — coleção Postman equivalente
 ```

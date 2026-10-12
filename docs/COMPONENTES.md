@@ -233,7 +233,7 @@ Detalhe em `LOGIN-ORACLE.md`.
 | `docker/fix-adapters.sh` | Corrige o bug do `adapters.os_xml` (`duplicate keys`) |
 | `test/test-proxy.sh` | `curl` a uma Proxy Service em `localhost:9001` |
 | `test/osb-test.postman_collection.json` | O mesmo teste no Postman |
-| `test/httpbin.wadl` | WADL de exemplo usado no `TUTORIAL.md` |
+| `test/httpbin.wadl` | WADL no formato do OSB (`GET /get`, operação `Method0`) para ligar ao Business Service no JDeveloper (`JDEVELOPER.md`, secção 6). O `TUTORIAL.md` não o usa: a consola gera o seu |
 
 ### 8.6 Serviço externo
 

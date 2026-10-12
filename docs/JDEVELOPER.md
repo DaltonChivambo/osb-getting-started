@@ -178,44 +178,114 @@ Se falhar:
 
 ## 6. Criar a aplicação e os componentes
 
-> **Estado:** estes menus seguem a estrutura do tooling do OSB 12c, mas **não foram validados no
-> IDE desta máquina**. Se um nome de menu diferir, os conceitos e a ordem mantêm-se.
+> **Estado:** este fluxo foi **validado nesta máquina** (JDeveloper 12.2.1.4 + OSB 12.2.1.4 na
+> imagem Docker): `curl http://localhost:9001/echotest` devolveu **HTTP 200** com o JSON do
+> backend. Os nomes dos menus são os que apareceram no IDE.
 
-A ordem é sempre **Application → Project → serviços**. Uma aplicação do JDeveloper é só o
-contentor; os serviços vivem dentro de um projeto Service Bus.
+A ordem é **Application → Project → serviços**. Uma aplicação do JDeveloper é só o contentor; os
+serviços vivem dentro de um projeto Service Bus.
 
-1. **Application:** *File → New → From Gallery → Service Bus → Service Bus Application*. Nome
-   sugerido: `OsbTutorial`. Termina o wizard; a aplicação fica **sem projeto**.
-2. **Project:** com a aplicação selecionada, *File → New → From Gallery → Service Bus →
-   Service Bus Project*. Nome sugerido: `TESTE_OSB` (o mesmo do `docs/TUTORIAL.md`).
-3. **Serviços**, dentro do projeto (botão direito no projeto → *New → From Gallery → Service Bus*),
-   **na mesma ordem e com a mesma forma** de `docs/TUTORIAL.md`:
+### 6.1 Aplicação e projeto
 
-   | Ordem | Componente | Nome | Configuração |
-   |---|---|---|---|
-   | 1 | Business Service | `HttpBinBS` | REST **tipado com WADL**, `https://httpbin.org`, recurso `get`, método `GET` |
-   | 2 | Proxy Service | `EchoTestPS` | REST **tipado com WADL**, Base URI `/echotest`, recurso `/`, método `GET` |
-   | 3 | Pipeline | `EchoTestPS_Pipeline` | Tipo REST, herda o WADL da `EchoTestPS` |
-   | 4 | Routing | dentro do **`RouteNode1`** do pipeline | *Route to* `HttpBinBS`, método `GET` |
-   | 5 | Target da proxy | `EchoTestPS` → `EchoTestPS_Pipeline` | aponta a proxy para o pipeline |
+1. *File → New → From Gallery → Service Bus → **Service Bus Application***. Nome sugerido:
+   `OsbTutorial`.
+2. Com a aplicação selecionada: *File → New → From Gallery → Service Bus → **Service Bus
+   Project***. Nome sugerido: `TESTE_OSB`.
 
-As armadilhas do `docs/TUTORIAL.md` aplicam-se **igualmente** no IDE, porque são regras do OSB e
-não da consola:
+### 6.2 O que o wizard do IDE **não** faz
 
-- REST *untyped* (sem WADL) não invoca o backend: `OSB-380000 ... Invalid HTTP method: null`.
-- Uma Proxy REST tipada **não** pode invocar diretamente uma Business Service REST tipada de
-  forma diferente: `OSB-398075`. Mete sempre um **Pipeline** no meio.
-- A ação **Routing** só existe num nó **Route**, não num Stage normal.
+O wizard de *Business Service* desta versão só oferece **REST** (sem WADL). Um serviço assim
+chega ao backend e falha com `OSB-380000 ... Invalid HTTP method: null`, porque o OSB não sabe
+que método usar (é a mesma armadilha do `docs/TUTORIAL.md`).
 
-Como confirmar: a aplicação compila sem erros (separador *Problems* vazio) e o *Service Bus
-Overview* mostra a cadeia Proxy → Pipeline → Business Service sem ligações a vermelho.
+A solução tem duas partes que **se fazem à mão**, em XML, dentro do projeto:
+
+1. um ficheiro **WADL** no formato que o OSB gera (secção 6.3);
+2. uma linha no `.bix` do Business Service que o liga a esse WADL (secção 6.4).
+
+### 6.3 O WADL
+
+O modelo está em `test/httpbin.wadl`. Copia-o para a **pasta do projeto** (a mesma do `.bix` e do
+`.proxy`) e faz botão direito no projeto → **Refresh**. É este:
+
+```xml
+<ns:application xmlns:ns="http://wadl.dev.java.net/2009/02" xmlns:rest="http://www.oracle.com/soa/rest">
+    <ns:doc title="HttpBinBS">HttpBinBS</ns:doc>
+    <ns:resources>
+        <ns:resource path="/get">
+            <ns:method name="GET" rest:name="Method0">
+                <ns:request/>
+                <ns:response><ns:representation mediaType="application/xml"/></ns:response>
+                <ns:response><ns:representation mediaType="application/xml"/></ns:response>
+            </ns:method>
+        </ns:resource>
+    </ns:resources>
+</ns:application>
+```
+
+Regras (todas confirmadas: o validador do OSB recusa o WADL sem elas):
+
+- **Sem `base` em `<resources>`.** O host vem do endpoint do Business Service.
+- **`rest:name`** no `<method>` com o namespace `http://www.oracle.com/soa/rest`. Dá o nome da
+  operação, que escolhes depois no Route. Tem de ser **único** dentro do WADL.
+- **`<request/>`** obrigatório (`Methods without 'request' element are not supported`).
+- **Duas `<response>`**, sem `status`, como o OSB gera.
+- `path` com `/` inicial e **só o caminho** do backend (`/get`).
+
+> Este modelo cobre **GETs simples, sem parâmetros**. Para parâmetros de query, POST/PUT ou
+> corpos, não está testado: cria o serviço uma vez na consola (*Typed REST from wizard (with
+> WADL)*), exporta o `sbconfig.jar` e copia o WADL gerado (ver 9.2).
+
+### 6.4 Serviços (por esta ordem)
+
+Botão direito no projeto → *New → From Gallery → **Service Bus Tier → Services***.
+
+| Ordem | Componente | Nome | Configuração |
+|---|---|---|---|
+| 1 | Business Service | `HttpBinBS` | Definition **REST**; Transport `http`; Endpoint URI no formato `http://host:80/caminho` (o wizard recusa URIs sem porta e sem `https`) |
+| 2 | Proxy Service | `EchoTestPS` | Definition **REST**; Transport `http`; Endpoint URI `/echotest` |
+| 3 | Pipeline | `EchoTestPSPipeline` | criado **automaticamente** pelo wizard da Proxy (`<Proxy>Pipeline`) |
+| 4 | Route | `RouteNode1`, no pipeline | nó **Route** com a ação **Routing** para `HttpBinBS` |
+
+Depois de gravar o Business Service, **abre o `HttpBinBS.bix`** (ficheiro de texto) e faz duas
+alterações:
+
+```xml
+<!-- 1. Ligar o WADL: acrescenta o <con:wadl> dentro do <con1:binding> -->
+<con1:binding type="native REST" xsi:type="con:NativeRestBindingType" xmlns:con="http://www.bea.com/wli/sb/services/bindings/config" xmlns:con1="http://xmlns.oracle.com/servicebus/business/config">
+    <con:wadl ref="TESTE_OSB/httpbin"/>      <!-- <projeto>/<nome do .wadl sem extensão> -->
+</con1:binding>
+
+<!-- 2. O endpoint passa a ser só a base (o caminho vem do WADL) -->
+<env:value>https://httpbin.org</env:value>
+```
+
+Recarrega o ficheiro no IDE (*Reload*). Em `Service Type` o editor passa a mostrar **REST
+Service** e **WADL URL**; o *Problems* tem de ficar vazio.
+
+### 6.5 O Route
+
+1. Abre o `EchoTestPSPipeline` (duplo clique). Se o desenho não tiver a paleta,
+   *View → **Components***.
+2. Arrasta o **Route** da paleta para a linha do fluxo; fica `RouteNode1`.
+3. Clica no `RouteNode1` → *Add → Communication → **Routing***.
+4. **Service:** `HttpBinBS`. **Operation:** escolhe `Method0` (a lista só se enche depois de o
+   WADL estar ligado e válido). **Save All**.
+
+A ação *Routing* só existe num nó **Route**, não num Stage normal.
+
+Como confirmar: o separador *Problems* está vazio e o `.pipeline` tem
+`<con1:operation>Method0</con1:operation>` dentro da ação `route`.
 
 ## 7. Publicar no servidor
 
-1. Botão direito na aplicação/projeto → **Deploy** → entrada de **Service Bus** (por exemplo
-   *to Service Bus*, ou *Deploy to Application Server*, conforme o menu da tua versão).
+1. Botão direito no **projeto** (`TESTE_OSB`, não na aplicação, para não publicar outros projetos
+   da mesma aplicação) → **Deploy** → entrada de **Service Bus** (por exemplo *to Service Bus*).
 2. Escolhe a ligação **`osb-docker`**.
 3. Marca **Overwrite** (substitui a configuração anterior com o mesmo nome) e conclui.
+
+Aparece um aviso **"Project and Server Configuration Mismatch"** (projeto em modo *Classic*,
+servidor em *Reference Configuration*). É só um aviso: clica **OK** e segue.
 
 Como confirmar: o *Deployment Log* termina com sucesso, e na Service Bus Console
 (http://localhost:7001/servicebus) o projeto aparece em *Projects*.
@@ -287,4 +357,10 @@ separador *Problems* está vazio.
 | Ligação falha por `base_domain` | **WLS Domain** errado | Passo 5.3 |
 | Publicação falha com *connection refused* | Contentor parado | `docker ps`; `./start-osb.sh` |
 | Publica mas a proxy responde 404 | Chamaste a porta 7001 em vez da 9001, ou o Base URI é outro | Usar `localhost:9001/<base uri>` |
-| `OSB-398075` / `OSB-380000` | Forma REST incompatível ou sem WADL | Secção 6 e `docs/TUTORIAL.md` |
+| `OSB-380000 ... Invalid HTTP method: null` | Business Service REST **sem WADL** (o wizard do IDE não o liga) | Secção 6.3 e 6.4: WADL no projeto + `<con:wadl ref=...>` no `.bix` + *Operation* no Route |
+| `OSB-380000` **sem mensagem** (corpo só `{ "errorCode" : "OSB-380000" }`) | Backend em baixo (503) ou WADL fora do formato do OSB | `curl` direto ao backend; se der 200, comparar o WADL com o modelo 6.3 |
+| *The WADL used by the service is not supported: ... missing required Oracle extensions* | Faltam `rest:name` ou `<request/>` no WADL | Secção 6.3 |
+| Campo **Operation** do Routing sem opções | WADL inválido ou não ligado ao `.bix` | Secção 6.3/6.4; *Problems* tem de estar vazio |
+| `OSB-398075` | Proxy tipada a invocar Business tipada de forma diferente | Meter um **Pipeline** no meio |
+| Test Connection: `JSR-160 Runtime ... failed`, resto `skipped`, e a consola nega a password certa | Conta `weblogic` **bloqueada** (5 tentativas inválidas, `BEA-090078`, 30 min) | Esperar 30 min ou reiniciar o `osbas`; corrigir a password guardada na ligação do IDE antes de voltar a testar |
+| Wizard recusa o Endpoint URI (`https://...` ou sem porta) | O wizard exige `http://host:porta/caminho` | Usar `http://host:80/caminho` e corrigir no `.bix` (6.4) |
